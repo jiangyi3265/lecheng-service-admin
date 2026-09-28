@@ -27,7 +27,7 @@
       </el-tab-pane>
       <el-tab-pane label="客服咨询" name="consultations">
         <div class="consult-layout">
-          <el-table v-loading="loading" :data="consultations" highlight-current-row @current-change="selectConsultation">
+          <el-table v-loading="loading" :data="consultations" row-key="sessionId" :current-row-key="selectedSession" highlight-current-row @current-change="selectConsultation">
             <el-table-column label="会话" min-width="120"><template #default="{ row }">{{ row.sessionId?.slice(0, 12) }}…</template></el-table-column>
             <el-table-column label="最新消息" prop="lastMessage" min-width="180" show-overflow-tooltip />
             <el-table-column label="消息数" prop="messageCount" width="80" />
@@ -65,7 +65,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listContent, deleteContent, listConsultations, listMessages, replyConsultation, listAppointments, updateAppointment, listFeedback, updateFeedback } from '@/api/lecheng'
 
@@ -107,7 +107,11 @@ async function refresh() {
   if (active.value === 'content') return loadContent()
   loading.value = true
   try {
-    if (active.value === 'consultations') { consultations.value = (await listConsultations()).data || []; if (selectedSession.value) messages.value = (await listMessages(selectedSession.value)).data || [] }
+    if (active.value === 'consultations') {
+      consultations.value = (await listConsultations()).data || []
+      if (selectedSession.value && !consultations.value.some(row => row.sessionId === selectedSession.value)) { selectedSession.value = ''; messages.value = []; replyText.value = ''; ++messageRequest }
+      if (selectedSession.value) await loadSelectedMessages()
+    }
     if (active.value === 'appointments') appointments.value = (await listAppointments()).data || []
     if (active.value === 'feedback') feedback.value = (await listFeedback()).data || []
   } finally { loading.value = false }
@@ -116,11 +120,37 @@ function createContent() { editorSource.value = { sortOrder: content.value.lengt
 function editContent(row) { editorSource.value = row; editorOpen.value = true; loadHospitalOptions().catch(() => {}) }
 async function contentSaved() { editorOpen.value = false; await loadContent() }
 async function removeContent(row) { await ElMessageBox.confirm(`确定删除“${kind.value === 'news' ? row.title : row.name}”？`, '删除内容', { type: 'warning' }); await deleteContent(row.id); ElMessage.success('已删除'); await loadContent() }
-async function selectConsultation(row) { selectedSession.value = row?.sessionId || ''; messages.value = selectedSession.value ? (await listMessages(selectedSession.value)).data || [] : [] }
-async function sendReply() { const text = replyText.value.trim(); if (!selectedSession.value || !text) return; saving.value = true; try { await replyConsultation(selectedSession.value, text); replyText.value = ''; await refresh(); ElMessage.success('回复已发送') } finally { saving.value = false } }
+let messageRequest = 0
+async function loadSelectedMessages() {
+  const session = selectedSession.value, requestId = ++messageRequest
+  const rows = (await listMessages(session)).data || []
+  if (requestId === messageRequest && selectedSession.value === session) messages.value = rows
+}
+async function selectConsultation(row) {
+  if (!row || row.sessionId === selectedSession.value) return
+  selectedSession.value = row.sessionId; messages.value = []; replyText.value = ''
+  await loadSelectedMessages()
+}
+async function sendReply() {
+  const text = replyText.value.trim(), session = selectedSession.value
+  if (!session || !text || saving.value) return
+  saving.value = true
+  try {
+    await replyConsultation(session, text)
+    if (selectedSession.value === session) replyText.value = ''
+    await refresh(); ElMessage.success('回复已发送')
+  } finally { saving.value = false }
+}
 async function setAppointment(row, status) { await updateAppointment(Number(row.id.slice(2)), status); await refresh() }
 async function setFeedback(row, status) { await updateFeedback(row.id, status); await refresh() }
-onMounted(refresh)
+let consultationPoller
+onMounted(() => {
+  refresh()
+  consultationPoller = setInterval(() => {
+    if (active.value === 'consultations' && !loading.value && !saving.value) refresh().catch(() => {})
+  }, 8000)
+})
+onUnmounted(() => clearInterval(consultationPoller))
 </script>
 
 <style scoped>
