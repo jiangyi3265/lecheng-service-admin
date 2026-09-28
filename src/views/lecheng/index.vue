@@ -10,7 +10,7 @@
       <el-tab-pane label="内容管理" name="content">
         <div class="toolbar">
           <el-segmented v-model="kind" :options="contentKinds" @change="loadContent" />
-          <el-button v-hasPermi="['lecheng:content:edit']" type="primary" @click="createContent">添加{{ kindLabel }}</el-button>
+          <el-button v-hasPermi="['lecheng:content:edit']" type="primary" :disabled="loading" @click="createContent">添加{{ kindLabel }}</el-button>
         </div>
         <div class="content-filters"><el-input v-model="searchText" clearable placeholder="输入名称查找内容" aria-label="查找内容" /><el-select v-model="statusFilter" placeholder="全部状态" aria-label="展示状态"><el-option label="全部状态" value="" /><el-option label="正在展示" value="1" /><el-option label="未展示 / 草稿" value="0" /></el-select><span>共 {{ visibleContent.length }} 条内容</span></div>
         <el-table v-loading="loading" :data="visibleContent" empty-text="这里还没有内容，点击上方按钮添加。">
@@ -94,18 +94,26 @@ const editorSource = ref({})
 
 async function loadHospitalOptions() { hospitalOptions.value = (await listContent('hospital')).data || [] }
 
-async function loadContent() { loading.value = true; try { content.value = (await listContent(apiKind.value)).data || [] } finally { loading.value = false } }
-async function refresh() {
+let contentRequest = 0
+async function loadContent() {
+  const requestId = ++contentRequest
   loading.value = true
   try {
-    if (active.value === 'content') content.value = (await listContent(apiKind.value)).data || []
+    const rows = (await listContent(apiKind.value)).data || []
+    if (requestId === contentRequest) content.value = rows
+  } finally { if (requestId === contentRequest) loading.value = false }
+}
+async function refresh() {
+  if (active.value === 'content') return loadContent()
+  loading.value = true
+  try {
     if (active.value === 'consultations') { consultations.value = (await listConsultations()).data || []; if (selectedSession.value) messages.value = (await listMessages(selectedSession.value)).data || [] }
     if (active.value === 'appointments') appointments.value = (await listAppointments()).data || []
     if (active.value === 'feedback') feedback.value = (await listFeedback()).data || []
   } finally { loading.value = false }
 }
-async function createContent() { await loadHospitalOptions(); editorSource.value = { sortOrder: content.value.length }; editorOpen.value = true }
-async function editContent(row) { await loadHospitalOptions(); editorSource.value = row; editorOpen.value = true }
+function createContent() { editorSource.value = { sortOrder: content.value.length }; editorOpen.value = true; loadHospitalOptions().catch(() => {}) }
+function editContent(row) { editorSource.value = row; editorOpen.value = true; loadHospitalOptions().catch(() => {}) }
 async function contentSaved() { editorOpen.value = false; await loadContent() }
 async function removeContent(row) { await ElMessageBox.confirm(`确定删除“${kind.value === 'news' ? row.title : row.name}”？`, '删除内容', { type: 'warning' }); await deleteContent(row.id); ElMessage.success('已删除'); await loadContent() }
 async function selectConsultation(row) { selectedSession.value = row?.sessionId || ''; messages.value = selectedSession.value ? (await listMessages(selectedSession.value)).data || [] : [] }
