@@ -1,20 +1,23 @@
 <template>
   <div class="app-container lecheng-console">
+    <ContentEditor v-if="editorOpen" :source="editorSource" :section="kind" :hospitals="hospitalOptions" @close="editorOpen = false" @saved="contentSaved" />
+    <template v-else>
     <div class="page-heading">
-      <div><h2>乐城运营</h2><p>小程序内容、咨询、预约申请与反馈</p></div>
+      <div><h2>乐城运营</h2><p>管理小程序里的图片、文字和客户咨询</p></div>
       <el-button @click="refresh">刷新当前列表</el-button>
     </div>
     <el-tabs v-model="active" @tab-change="refresh">
       <el-tab-pane label="内容管理" name="content">
         <div class="toolbar">
           <el-segmented v-model="kind" :options="contentKinds" @change="loadContent" />
-          <el-button v-hasPermi="['lecheng:content:edit']" type="primary" @click="createContent">新增内容</el-button>
+          <el-button v-hasPermi="['lecheng:content:edit']" type="primary" @click="createContent">添加{{ kindLabel }}</el-button>
         </div>
-        <el-table v-loading="loading" :data="content" border>
-          <el-table-column label="ID" prop="id" min-width="180" />
-          <el-table-column label="名称" min-width="220"><template #default="{ row }">{{ row.title || row.name }}</template></el-table-column>
+        <div class="content-filters"><el-input v-model="searchText" clearable placeholder="输入名称查找内容" aria-label="查找内容" /><el-select v-model="statusFilter" placeholder="全部状态" aria-label="展示状态"><el-option label="全部状态" value="" /><el-option label="正在展示" value="1" /><el-option label="未展示 / 草稿" value="0" /></el-select><span>共 {{ visibleContent.length }} 条内容</span></div>
+        <el-table v-loading="loading" :data="visibleContent" empty-text="这里还没有内容，点击上方按钮添加。">
+          <el-table-column label="封面" width="100"><template #default="{ row }"><el-image v-if="row.coverImage" :src="row.coverImage" fit="cover" class="list-thumbnail" /><span v-else class="muted-label">示意图片</span></template></el-table-column>
+          <el-table-column label="名称" min-width="220"><template #default="{ row }">{{ kind === 'news' ? row.title : row.name }}</template></el-table-column>
           <el-table-column label="分类" prop="category" min-width="120" />
-          <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === '1' ? 'success' : 'info'">{{ row.status === '1' ? '上架' : '下架' }}</el-tag></template></el-table-column>
+          <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === '1' ? 'success' : 'info'">{{ row.status === '1' ? '展示中' : '未展示' }}</el-tag></template></el-table-column>
           <el-table-column label="排序" prop="sortOrder" width="85" />
           <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }">
             <el-button v-hasPermi="['lecheng:content:edit']" link type="primary" @click="editContent(row)">编辑</el-button>
@@ -57,33 +60,24 @@
         </el-table>
       </el-tab-pane>
     </el-tabs>
-    <el-dialog v-model="editorOpen" :title="editingExisting ? '编辑内容' : '新增内容'" width="760px" destroy-on-close>
-      <el-form label-width="95px">
-        <el-form-item label="分类"><el-input :model-value="kindLabel" disabled /></el-form-item>
-        <el-form-item label="ID"><el-input v-model.trim="editor.id" :disabled="editingExisting" maxlength="80" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model.trim="editor.heading" maxlength="200" /></el-form-item>
-        <el-form-item v-if="kind === 'resource'" label="展示栏目"><el-select v-model="editor.resourceKind" style="width: 100%"><el-option label="特许药械（药品）" value="药品" /><el-option label="亚健康项目（器械）" value="器械" /></el-select></el-form-item>
-        <template v-if="kind === 'doctor'">
-          <el-form-item label="所属医院"><el-select v-model="editor.hospitalId" filterable style="width: 100%" placeholder="选择已上架医院"><el-option v-for="hospital in hospitalOptions" :key="hospital.id" :label="hospital.name" :value="hospital.id" /></el-select></el-form-item>
-          <el-form-item label="所属科室"><el-input v-model.trim="editor.department" maxlength="50" placeholder="例如：综合内科" /></el-form-item>
-        </template>
-        <el-form-item label="展示状态"><el-switch v-model="editor.published" active-text="上架" inactive-text="下架" /></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="editor.sortOrder" :min="0" :max="100000" /></el-form-item>
-        <el-form-item label="完整内容"><el-input v-model="editor.json" type="textarea" :rows="15" spellcheck="false" /><div class="field-help">JSON 对应小程序展示字段；保存时 ID、名称、状态和排序以表单上方为准。</div></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button type="primary" :loading="saving" @click="submitContent">保存并同步小程序</el-button></template>
-    </el-dialog>
+    </template>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listContent, saveContent, deleteContent, listConsultations, listMessages, replyConsultation, listAppointments, updateAppointment, listFeedback, updateFeedback } from '@/api/lecheng'
+import { listContent, deleteContent, listConsultations, listMessages, replyConsultation, listAppointments, updateAppointment, listFeedback, updateFeedback } from '@/api/lecheng'
+
+import ContentEditor from './ContentEditor.vue'
+import { sections, belongsToSection } from './content-model.mjs'
 
 const active = ref('content')
 const kind = ref('hospital')
-const contentKinds = [{ label: '医院', value: 'hospital' }, { label: '批复项目', value: 'project' }, { label: '特许药械 / 亚健康项目', value: 'resource' }, { label: '乐城动态', value: 'news' }, { label: '医生', value: 'doctor' }]
+const contentKinds = sections
+const apiKind = computed(() => sections.find(s => s.value === kind.value).kind)
+const searchText = ref(''), statusFilter = ref('')
+const visibleContent = computed(() => content.value.filter(row => belongsToSection(row, kind.value) && (!statusFilter.value || row.status === statusFilter.value) && (kind.value === 'news' ? row.title : row.name)?.toLowerCase().includes(searchText.value.trim().toLowerCase())))
 const kindLabel = computed(() => contentKinds.find(item => item.value === kind.value)?.label || '')
 const loading = ref(false)
 const saving = ref(false)
@@ -96,40 +90,24 @@ const replyText = ref('')
 const appointments = ref([])
 const feedback = ref([])
 const editorOpen = ref(false)
-const editingExisting = ref(false)
-const editor = ref({ id: '', heading: '', published: true, sortOrder: 0, resourceKind: '药品', hospitalId: '', department: '', json: '{}' })
+const editorSource = ref({})
 
-async function loadHospitalOptions() { hospitalOptions.value = ((await listContent('hospital')).data || []).filter(item => item.status === '1') }
+async function loadHospitalOptions() { hospitalOptions.value = (await listContent('hospital')).data || [] }
 
-async function loadContent() { loading.value = true; try { content.value = (await listContent(kind.value)).data || [] } finally { loading.value = false } }
+async function loadContent() { loading.value = true; try { content.value = (await listContent(apiKind.value)).data || [] } finally { loading.value = false } }
 async function refresh() {
   loading.value = true
   try {
-    if (active.value === 'content') content.value = (await listContent(kind.value)).data || []
+    if (active.value === 'content') content.value = (await listContent(apiKind.value)).data || []
     if (active.value === 'consultations') { consultations.value = (await listConsultations()).data || []; if (selectedSession.value) messages.value = (await listMessages(selectedSession.value)).data || [] }
     if (active.value === 'appointments') appointments.value = (await listAppointments()).data || []
     if (active.value === 'feedback') feedback.value = (await listFeedback()).data || []
   } finally { loading.value = false }
 }
-function createContent() { editingExisting.value = false; editor.value = { id: '', heading: '', published: true, sortOrder: content.value.length, resourceKind: '药品', hospitalId: '', department: '', json: '{}' }; if (kind.value === 'doctor') loadHospitalOptions(); editorOpen.value = true }
-function editContent(row) { editingExisting.value = true; editor.value = { id: row.id, heading: row.title || row.name, published: row.status === '1', sortOrder: Number(row.sortOrder) || 0, resourceKind: row.kind || '药品', hospitalId: row.hospitalId || '', department: row.department || '', json: JSON.stringify(row, null, 2) }; if (kind.value === 'doctor') loadHospitalOptions(); editorOpen.value = true }
-async function submitContent() {
-  let data
-  try { data = JSON.parse(editor.value.json); if (!data || Array.isArray(data) || typeof data !== 'object') throw new Error('JSON 须为对象') }
-  catch (error) { ElMessage.error(`内容 JSON 无效：${error.message}`); return }
-  if (!editor.value.id || !editor.value.heading) { ElMessage.warning('请填写 ID 和名称'); return }
-  data.id = editor.value.id; data.kindCode = kind.value; data.status = editor.value.published ? '1' : '0'; data.sortOrder = editor.value.sortOrder
-  if (kind.value === 'news') data.title = editor.value.heading; else data.name = editor.value.heading
-  if (kind.value === 'resource') data.kind = editor.value.resourceKind
-  if (kind.value === 'doctor') {
-    if (!editor.value.hospitalId) { ElMessage.warning('请选择所属医院'); return }
-    data.hospitalId = editor.value.hospitalId
-    data.department = editor.value.department || '待更新'
-  }
-  saving.value = true
-  try { await saveContent(data); editorOpen.value = false; ElMessage.success('已保存'); await loadContent() } finally { saving.value = false }
-}
-async function removeContent(row) { await ElMessageBox.confirm(`确定删除“${row.title || row.name}”？`, '删除内容', { type: 'warning' }); await deleteContent(row.id); ElMessage.success('已删除'); await loadContent() }
+async function createContent() { await loadHospitalOptions(); editorSource.value = { sortOrder: content.value.length }; editorOpen.value = true }
+async function editContent(row) { await loadHospitalOptions(); editorSource.value = row; editorOpen.value = true }
+async function contentSaved() { editorOpen.value = false; await loadContent() }
+async function removeContent(row) { await ElMessageBox.confirm(`确定删除“${kind.value === 'news' ? row.title : row.name}”？`, '删除内容', { type: 'warning' }); await deleteContent(row.id); ElMessage.success('已删除'); await loadContent() }
 async function selectConsultation(row) { selectedSession.value = row?.sessionId || ''; messages.value = selectedSession.value ? (await listMessages(selectedSession.value)).data || [] : [] }
 async function sendReply() { const text = replyText.value.trim(); if (!selectedSession.value || !text) return; saving.value = true; try { await replyConsultation(selectedSession.value, text); replyText.value = ''; await refresh(); ElMessage.success('回复已发送') } finally { saving.value = false } }
 async function setAppointment(row, status) { await updateAppointment(Number(row.id.slice(2)), status); await refresh() }
@@ -143,6 +121,9 @@ onMounted(refresh)
 .page-heading h2 { margin: 0 0 5px; font-size: 23px; }
 .page-heading p { margin: 0; color: #7b8794; }
 .toolbar { display: flex; justify-content: space-between; gap: 16px; margin: 12px 0 20px; }
+.content-filters { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+.content-filters .el-input { width:280px; }.content-filters .el-select { width:160px; }.content-filters span { font-size:13px; color:#63758a; }
+.list-thumbnail { width:68px; height:48px; border-radius:5px; }.muted-label { color:#8393a3; font-size:12px; }
 .table-tip { margin-bottom: 18px; }
 .consult-layout { display: grid; grid-template-columns: minmax(320px, 42%) 1fr; gap: 18px; min-height: 500px; }
 .conversation-panel { display: flex; flex-direction: column; min-height: 500px; border: 1px solid #e8edf2; border-radius: 8px; padding: 18px; }

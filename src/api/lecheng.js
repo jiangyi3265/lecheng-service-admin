@@ -1,5 +1,13 @@
 import request from '@/utils/request'
 
+export async function uploadContentImage(file) {
+  const data = new FormData()
+  data.append('file', file)
+  const result = await request({ url: '/common/upload', method: 'post', data, timeout: 60000, headers: { 'Content-Type': 'multipart/form-data', repeatSubmit: false } })
+  const base = new URL(import.meta.env.VITE_APP_BASE_API + '/', window.location.origin)
+  return new URL(result.fileName.replace(/^\//, ''), base).href
+}
+
 export const listContent = kind => request({ url: '/lecheng/content', method: 'get', params: { kind } })
 export const saveContent = data => request({ url: '/lecheng/content', method: 'post', data })
 export const deleteContent = id => request({ url: `/lecheng/content/${encodeURIComponent(id)}`, method: 'delete' })
