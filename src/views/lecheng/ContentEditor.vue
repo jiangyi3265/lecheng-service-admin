@@ -14,7 +14,7 @@
             <div class="field-pair"><el-form-item label="医院类型"><el-autocomplete v-model="form.type" :fetch-suggestions="suggest(['综合医院', '专科医院', '健康管理中心'])" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item><el-form-item label="联系电话"><el-input v-model="form.phone" maxlength="60" placeholder="例如：0898-12345678" /></el-form-item></div>
             <el-form-item label="医院地址"><el-input v-model="form.address" maxlength="300" placeholder="填写医院的详细地址" /></el-form-item>
             <el-form-item label="一句话介绍"><el-input v-model="form.subtitle" maxlength="100" placeholder="例如：多学科诊疗 · 全程服务" /></el-form-item>
-            <el-form-item label="特色标签"><el-input-tag :model-value="form.tags" :max="6" :delimiter="TAG_DELIMITER" save-on-blur clearable placeholder="直接输入，如：脑瘤、神经（逗号、空格或回车分隔，最多 6 个）" @update:model-value="form.tags = [...new Set($event || [])]" /><div class="quick-tags"><span>常用：</span><el-button v-for="tag in ['综合医疗', '国际诊疗', '专科诊疗', '健康管理', '医学检查']" :key="tag" size="small" text :disabled="form.tags.includes(tag) || form.tags.length >= 6" @click="form.tags = [...form.tags, tag]">＋{{ tag }}</el-button></div></el-form-item>
+            <el-form-item label="服务方向标签"><el-input-tag :model-value="form.tags" :max="6" :delimiter="TAG_DELIMITER" save-on-blur clearable placeholder="直接输入，如：脑瘤、神经（逗号、空格或回车分隔，最多 6 个）" @update:model-value="form.tags = [...new Set($event || [])]" /><div class="quick-tags"><span>常用：</span><el-button v-for="tag in ['综合医疗', '国际诊疗', '专科诊疗', '健康管理', '医学检查']" :key="tag" size="small" text :disabled="form.tags.includes(tag) || form.tags.length >= 6" @click="form.tags = [...form.tags, tag]">＋{{ tag }}</el-button></div><p class="help">显示在小程序医院页顶部蓝色条里，并在“基本情况”中以“服务方向：…”展示。</p></el-form-item>
           </template>
           <template v-if="section === 'news'">
             <div class="field-pair"><el-form-item label="资讯分类"><el-autocomplete v-model="form.category" :fetch-suggestions="suggest(['园区生活', '就医指南', '医疗资讯', '乐城动态'])" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item><el-form-item label="发布日期"><el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item></div>
@@ -27,10 +27,11 @@
           </template>
           <el-form-item v-if="section !== 'doctor'" :label="section === 'hospital' ? '医院简介' : '列表摘要'"><el-input v-model="form[section === 'hospital' ? 'description' : 'summary']" type="textarea" :rows="3" :maxlength="section === 'hospital' ? 10000 : 500" show-word-limit :placeholder="section === 'hospital' ? '用文字介绍医院的基本情况' : section === 'news' ? '简要介绍这条内容，显示在列表中；不填则自动取正文第一段' : '简要介绍这条内容，显示在列表中'" /></el-form-item>
         </section>
-        <section v-if="section !== 'news' && section !== 'doctor'">
-          <h3>查询分类</h3><p class="section-help">选择后，用户可以在小程序中按科室、疾病找到这条内容。</p>
-          <el-form-item v-if="section === 'hospital' || section === 'project'" label="所属科室"><el-select v-model="form.departments" multiple filterable allow-create default-first-option placeholder="可选择多个科室"><el-option v-for="d in departments" :key="d" :label="d" :value="d" /></el-select></el-form-item>
-          <el-form-item v-if="section !== 'hospital'" class="category-field"><template #label>{{ section === 'project' ? '展示标签' : '所属科室' }}</template><el-autocomplete v-model="form.category" :fetch-suggestions="suggest(departments)" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item>
+        <!-- 医院不出现在小程序“查询”结果里，查询分类对医院不起作用，所以医院不显示这一块 -->
+        <section v-if="section !== 'news' && section !== 'doctor' && section !== 'hospital'">
+          <h3>查询分类</h3><p class="section-help">选择后，用户可以在小程序“查询”页按科室、疾病找到这条内容。</p>
+          <el-form-item v-if="section === 'hospital' || section === 'project'" label="所属科室"><el-select v-model="form.departments" multiple filterable allow-create default-first-option placeholder="可选择多个科室"><el-option v-for="d in departments" :key="d" :label="d" :value="d" /></el-select><p v-if="form.departments.some(d => !isFilterableDepartment(d))" class="field-warning">“{{ form.departments.filter(d => !isFilterableDepartment(d)).join('、') }}”不在小程序的固定科室里，用户按科室筛选时找不到这条；建议从下拉中选择。</p></el-form-item>
+          <el-form-item v-if="section !== 'hospital'" class="category-field"><template #label>{{ section === 'project' ? '展示标签' : '所属科室' }}</template><el-autocomplete v-model="form.category" :fetch-suggestions="suggest(departments)" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /><p v-if="section !== 'project' && !isFilterableDepartment(form.category)" class="field-warning">“{{ form.category }}”不在小程序的固定科室里，用户按科室筛选时找不到这条；建议从提示中选择。</p></el-form-item>
           <el-form-item label="疾病分类（选填）"><el-select :model-value="form.diseaseCategories || []" multiple clearable placeholder="选择相关疾病分类" @update:model-value="form.diseaseCategories = $event"><el-option v-for="d in diseases" :key="d" :label="d" :value="d" /></el-select></el-form-item>
         </section>
         <section v-if="section !== 'doctor'">
@@ -77,7 +78,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { saveContent } from '@/api/lecheng'
 import ContentImages from './ContentImages.vue'
 import ContentBlocksEditor from './ContentBlocksEditor.vue'
-import { createForm, serializeForm, sections, departments, diseases, uid } from './content-model.mjs'
+import { createForm, serializeForm, sections, departments, diseases, uid, isFilterableDepartment } from './content-model.mjs'
 // 标签分隔符：中英文逗号、顿号、分号、空格（\s 表示空白）
 const TAG_DELIMITER = /[,，、;；\s]+/
 // 输入框下拉提示：正在输入部分文字时按文字过滤；输入框为空、已是完整选项或自定义值时显示全部常用项
@@ -140,6 +141,7 @@ h3 { margin:0 0 18px; font-size:17px; color:#253c52; }
 .section-help { margin:-6px 0 20px; }
 .field-pair { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 .editor-form :deep(.el-select),.editor-form :deep(.el-date-editor),.editor-form :deep(.el-autocomplete) { width:100%; }
+.field-warning { margin:6px 0 0; font-size:12px; line-height:1.5; color:#b26a00; }
 .quick-tags { display:flex; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:12px; color:#667688; }
 .quick-tags .el-button { margin-left:4px; }
 .editor-form :deep(.el-form-item__label) { font-weight:500; color:#34495e; }
