@@ -1,36 +1,36 @@
 <template>
   <div class="content-editor">
     <header class="editor-header">
-      <div><el-button text @click="close">← 返回列表</el-button><h2>{{ source.id ? '编辑' : '添加' }}{{ sectionInfo.label }}</h2><p>填好文字、上传图片，保存后即可在小程序中展示。</p></div>
+      <div><el-button text @click="close">← 返回列表</el-button><h2>{{ source.id ? '编辑' : '添加' }}{{ sectionInfo.label }}</h2><p>填好文字、上传图片；右侧“在小程序展示”打开后保存，用户即可看到，关闭则只保存为草稿。</p></div>
       <el-button @click="previewOpen = true">预览内容</el-button>
     </header>
     <div class="editor-layout">
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="editor-form" :disabled="saving">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="editor-form" :disabled="saving" scroll-to-error :scroll-into-view-options="{ block: 'center' }">
         <section>
           <h3>基本信息</h3>
           <el-form-item :label="nameLabel" :prop="section === 'news' ? 'title' : 'name'"><el-input v-model="form[section === 'news' ? 'title' : 'name']" maxlength="200" show-word-limit :placeholder="'请输入' + nameLabel" /></el-form-item>
           <el-form-item :label="section === 'doctor' ? '医生照片' : '封面图片'"><ContentImages :model-value="form.coverImage ? [form.coverImage] : []" :disabled="saving" @update:model-value="form.coverImage = $event[0] || ''" @busy="trackUpload" /><p v-if="source.id && !form.coverImage" class="help">未上传时沿用原来的示意图片。</p></el-form-item>
           <template v-if="section === 'hospital'">
-            <div class="field-pair"><el-form-item label="医院类型"><el-select v-model="form.type" filterable allow-create default-first-option placeholder="选择或输入医院类型"><el-option v-for="type in ['综合医院', '专科医院', '健康管理中心']" :key="type" :label="type" :value="type" /></el-select></el-form-item><el-form-item label="联系电话"><el-input v-model="form.phone" maxlength="60" placeholder="例如：0898-12345678" /></el-form-item></div>
+            <div class="field-pair"><el-form-item label="医院类型"><el-autocomplete v-model="form.type" :fetch-suggestions="suggest(['综合医院', '专科医院', '健康管理中心'])" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item><el-form-item label="联系电话"><el-input v-model="form.phone" maxlength="60" placeholder="例如：0898-12345678" /></el-form-item></div>
             <el-form-item label="医院地址"><el-input v-model="form.address" maxlength="300" placeholder="填写医院的详细地址" /></el-form-item>
             <el-form-item label="一句话介绍"><el-input v-model="form.subtitle" maxlength="100" placeholder="例如：多学科诊疗 · 全程服务" /></el-form-item>
-            <el-form-item label="特色标签"><el-select v-model="form.tags" multiple filterable allow-create default-first-option :multiple-limit="6" placeholder="输入一个标签后按回车，可添加多个"><el-option v-for="tag in ['综合医疗', '国际诊疗', '专科诊疗', '健康管理', '医学检查']" :key="tag" :label="tag" :value="tag" /></el-select></el-form-item>
+            <el-form-item label="特色标签"><el-input-tag :model-value="form.tags" :max="6" :delimiter="TAG_DELIMITER" save-on-blur clearable placeholder="直接输入，如：脑瘤、神经（逗号、空格或回车分隔，最多 6 个）" @update:model-value="form.tags = [...new Set($event || [])]" /><div class="quick-tags"><span>常用：</span><el-button v-for="tag in ['综合医疗', '国际诊疗', '专科诊疗', '健康管理', '医学检查']" :key="tag" size="small" text :disabled="form.tags.includes(tag) || form.tags.length >= 6" @click="form.tags = [...form.tags, tag]">＋{{ tag }}</el-button></div></el-form-item>
           </template>
           <template v-if="section === 'news'">
-            <div class="field-pair"><el-form-item label="资讯分类"><el-select v-model="form.category" filterable allow-create default-first-option placeholder="选择或输入分类"><el-option v-for="category in ['园区生活', '就医指南', '医疗资讯', '乐城动态']" :key="category" :label="category" :value="category" /></el-select></el-form-item><el-form-item label="发布日期"><el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item></div>
+            <div class="field-pair"><el-form-item label="资讯分类"><el-autocomplete v-model="form.category" :fetch-suggestions="suggest(['园区生活', '就医指南', '医疗资讯', '乐城动态'])" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item><el-form-item label="发布日期"><el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item></div>
           </template>
           <template v-if="section === 'doctor'">
             <el-form-item label="所属医院" prop="hospitalId"><el-select v-model="form.hospitalId" filterable placeholder="选择所属医院"><el-option v-for="hospital in hospitals" :key="hospital.id" :label="hospital.name + (hospital.status !== '1' ? '（未展示）' : '')" :value="hospital.id" :disabled="hospital.status !== '1'" /></el-select></el-form-item>
-            <div class="field-pair"><el-form-item label="所属科室"><el-select v-model="form.department" filterable allow-create default-first-option placeholder="选择或输入科室"><el-option v-for="d in departments" :key="d" :label="d" :value="d" /></el-select></el-form-item><el-form-item label="职称"><el-input v-model="form.title" maxlength="100" placeholder="例如：主任医师" /></el-form-item></div>
+            <div class="field-pair"><el-form-item label="所属科室"><el-autocomplete v-model="form.department" :fetch-suggestions="suggest(departments)" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item><el-form-item label="职称"><el-input v-model="form.title" maxlength="100" placeholder="例如：主任医师" /></el-form-item></div>
             <el-form-item label="医生介绍"><el-input v-model="form.intro" type="textarea" :rows="5" maxlength="10000" show-word-limit placeholder="填写医生简介、专业方向等" /></el-form-item>
-            <el-form-item label="服务方向"><el-select v-model="form.services" multiple filterable allow-create default-first-option placeholder="输入服务方向后按回车" /></el-form-item>
+            <el-form-item label="服务方向"><el-input-tag :model-value="form.services" :delimiter="TAG_DELIMITER" save-on-blur clearable placeholder="直接输入，逗号、空格或回车分隔" @update:model-value="form.services = [...new Set($event || [])]" /></el-form-item>
           </template>
-          <el-form-item v-if="section !== 'doctor'" :label="section === 'hospital' ? '医院简介' : '列表摘要'"><el-input v-model="form[section === 'hospital' ? 'description' : 'summary']" type="textarea" :rows="3" :maxlength="section === 'hospital' ? 10000 : 500" show-word-limit :placeholder="section === 'hospital' ? '用文字介绍医院的基本情况' : '简要介绍这条内容，显示在列表中'" /></el-form-item>
+          <el-form-item v-if="section !== 'doctor'" :label="section === 'hospital' ? '医院简介' : '列表摘要'"><el-input v-model="form[section === 'hospital' ? 'description' : 'summary']" type="textarea" :rows="3" :maxlength="section === 'hospital' ? 10000 : 500" show-word-limit :placeholder="section === 'hospital' ? '用文字介绍医院的基本情况' : section === 'news' ? '简要介绍这条内容，显示在列表中；不填则自动取正文第一段' : '简要介绍这条内容，显示在列表中'" /></el-form-item>
         </section>
         <section v-if="section !== 'news' && section !== 'doctor'">
           <h3>查询分类</h3><p class="section-help">选择后，用户可以在小程序中按科室、疾病找到这条内容。</p>
           <el-form-item v-if="section === 'hospital' || section === 'project'" label="所属科室"><el-select v-model="form.departments" multiple filterable allow-create default-first-option placeholder="可选择多个科室"><el-option v-for="d in departments" :key="d" :label="d" :value="d" /></el-select></el-form-item>
-          <el-form-item v-if="section !== 'hospital'" class="category-field"><template #label>{{ section === 'project' ? '展示标签' : '所属科室' }}</template><el-select v-model="form.category" filterable allow-create default-first-option placeholder="选择或输入科室 / 标签"><el-option v-for="d in departments" :key="d" :label="d" :value="d" /></el-select></el-form-item>
+          <el-form-item v-if="section !== 'hospital'" class="category-field"><template #label>{{ section === 'project' ? '展示标签' : '所属科室' }}</template><el-autocomplete v-model="form.category" :fetch-suggestions="suggest(departments)" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item>
           <el-form-item label="疾病分类（选填）"><el-select :model-value="form.diseaseCategories || []" multiple clearable placeholder="选择相关疾病分类" @update:model-value="form.diseaseCategories = $event"><el-option v-for="d in diseases" :key="d" :label="d" :value="d" /></el-select></el-form-item>
         </section>
         <section v-if="section !== 'doctor'">
@@ -66,7 +66,7 @@
     </div>
     <footer class="editor-footer"><span role="status">{{ uploading ? '图片正在上传，请稍候…' : dirty ? '有尚未保存的修改' : '可以开始编辑内容' }}</span><div><el-button :disabled="saving || uploading > 0" @click="close">取消</el-button><el-button type="primary" :loading="saving" :disabled="uploading > 0" @click="submit">{{ form.published ? '保存并展示' : '保存草稿' }}</el-button></div></footer>
     <el-drawer v-model="previewOpen" title="内容预览" size="420px" append-to-body>
-      <div class="content-preview"><img v-if="form.coverImage" :src="form.coverImage" alt="封面图片" /><div v-else class="preview-placeholder">封面图片</div><h2>{{ form[section === 'news' ? 'title' : 'name'] || nameLabel }}</h2><p class="preview-meta">{{ form.date || form.subtitle || form.category }}</p><p>{{ form.description || form.summary || form.intro }}</p><template v-for="(block, i) in form.contentBlocks" :key="i"><template v-if="block.type === 'text'"><h3 v-if="block.title">{{ block.title }}</h3><p>{{ block.text }}</p></template><figure v-else-if="block.url"><img :src="block.url" :alt="block.caption || '正文图片'" /><figcaption>{{ block.caption }}</figcaption></figure></template><template v-if="form.environmentImages.length"><h3>医院环境</h3><div class="preview-gallery"><img v-for="url in form.environmentImages" :key="url" :src="url" alt="医院环境" /></div></template><template v-if="isProject && form.hospitalIds.length"><h3>落地医院</h3><p v-for="id in form.hospitalIds" :key="id">{{ hospitals.find(h => h.id === id)?.name }}</p></template><p class="preview-meta">此处用于核对图片和文字，实际排版以小程序为准。</p></div>
+      <div class="content-preview"><img v-if="form.coverImage" :src="form.coverImage" alt="封面图片" /><div v-else class="preview-placeholder">封面图片</div><h2>{{ form[section === 'news' ? 'title' : 'name'] || nameLabel }}</h2><p v-if="form.date || form.subtitle || form.category" class="preview-meta">{{ form.date || form.subtitle || form.category }}</p><template v-if="section === 'hospital'"><div v-if="form.type || form.tags.length" class="preview-tags"><b v-if="form.type">{{ form.type }}</b><span v-for="tag in form.tags" :key="tag">{{ tag }}</span></div><p v-if="form.address || form.phone" class="preview-meta">{{ form.address }}{{ form.address && form.phone ? ' · ' : '' }}{{ form.phone ? '电话 ' + form.phone : '' }}</p></template><template v-if="section === 'doctor'"><p class="preview-meta">{{ [form.department, form.title, hospitals.find(h => h.id === form.hospitalId)?.name].filter(Boolean).join(' · ') }}</p><div v-if="form.services.length" class="preview-tags"><span v-for="item in form.services" :key="item">{{ item }}</span></div></template><p>{{ form.description || form.summary || form.intro }}</p><template v-for="(block, i) in form.contentBlocks" :key="i"><template v-if="block.type === 'text'"><h3 v-if="block.title">{{ block.title }}</h3><p>{{ block.text }}</p></template><figure v-else-if="block.url"><img :src="block.url" :alt="block.caption || '正文图片'" /><figcaption>{{ block.caption }}</figcaption></figure></template><template v-if="form.environmentImages.length"><h3>医院环境</h3><div class="preview-gallery"><img v-for="url in form.environmentImages" :key="url" :src="url" alt="医院环境" /></div></template><template v-if="isProject && form.hospitalIds.length"><h3>落地医院</h3><p v-for="id in form.hospitalIds" :key="id">{{ hospitals.find(h => h.id === id)?.name }}</p></template><p class="preview-meta">此处用于核对图片和文字，实际排版以小程序为准。</p></div>
     </el-drawer>
   </div>
 </template>
@@ -77,7 +77,17 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { saveContent } from '@/api/lecheng'
 import ContentImages from './ContentImages.vue'
 import ContentBlocksEditor from './ContentBlocksEditor.vue'
-import { createForm, serializeForm, sections, departments, diseases } from './content-model.mjs'
+import { createForm, serializeForm, sections, departments, diseases, uid } from './content-model.mjs'
+// 标签分隔符：中英文逗号、顿号、分号、空格（\s 表示空白）
+const TAG_DELIMITER = /[,，、;；\s]+/
+// 输入框下拉提示：正在输入部分文字时按文字过滤；输入框为空、已是完整选项或自定义值时显示全部常用项
+const suggest = options => (query, callback) => {
+  const q = (query || '').trim()
+  const hits = options.filter(o => o.includes(q))
+  callback((!q || options.includes(q) || !hits.length ? options : hits).map(value => ({ value })))
+}
+// 新内容的编号在打开编辑器时就定下来：保存超时后再点保存，覆盖的是同一条，不会出现两条重复内容
+const draftUid = uid()
 const props = defineProps({ source: { type: Object, default: () => ({}) }, section: String, hospitals: { type: Array, default: () => [] } })
 const emit = defineEmits(['close', 'saved'])
 const form = reactive(createForm(props.source, props.section)), baseline = JSON.stringify(form)
@@ -86,7 +96,7 @@ const dirty = computed(() => JSON.stringify(form) !== baseline)
 const sectionInfo = computed(() => sections.find(s => s.value === props.section))
 const isProject = computed(() => ['project', 'medicine', 'wellness'].includes(props.section))
 const nameLabel = computed(() => props.section === 'news' ? '文章标题' : props.section === 'doctor' ? '医生姓名' : props.section === 'hospital' ? '医院名称' : props.section === 'medicine' ? '药械名称' : '项目名称')
-const requiredName = { validator: (_, value, callback) => value?.trim() ? callback() : callback(new Error('请填写' + nameLabel.value)), trigger: 'blur' }
+const requiredName = { required: true, validator: (_, value, callback) => value?.trim() ? callback() : callback(new Error('请填写' + nameLabel.value)), trigger: 'blur' }
 const rules = computed(() => ({ [props.section === 'news' ? 'title' : 'name']: [requiredName], hospitalId: [{ required: props.section === 'doctor', message: '请选择所属医院', trigger: 'change' }] }))
 function trackUpload(value) { uploading.value += value ? 1 : -1 }
 async function canLeave() {
@@ -98,12 +108,18 @@ async function canLeave() {
 async function close() { if (await canLeave()) emit('close') }
 async function submit() {
   if (!await formRef.value.validate().catch(() => false)) { ElMessage.warning('请先填写标红的必填内容'); return }
+  // 整理数据出错（如浏览器不支持某功能）时要明确提示，不能表现成“点了没反应”
+  let data
+  try { data = serializeForm(form, props.source, props.section, () => draftUid) } catch (e) {
+    console.error('[lecheng] serializeForm failed', e)
+    ElMessage.error('保存失败：' + ((e && e.message) || e) + '。请截图发给技术人员。')
+    return
+  }
+  if (JSON.stringify(data).length > 95000) { ElMessage.warning('这篇内容太长，请精简文字或拆分为多篇后保存。'); return }
   saving.value = true
   try {
-    const data = serializeForm(form, props.source, props.section)
-    if (JSON.stringify(data).length > 95000) { ElMessage.warning('这篇内容太长，请精简文字或拆分为多篇后保存。'); return }
     await saveContent(data); finished.value = true; ElMessage.success(form.published ? '已保存，小程序内容已更新' : '草稿已保存'); emit('saved')
-  } catch { /* Request layer displays the error; keep the user's draft intact. */ }
+  } catch { /* 接口错误由请求层弹出提示；保留用户填写的内容 */ }
   finally { saving.value = false }
 }
 function beforeUnload(event) { if (!finished.value && (dirty.value || uploading.value)) { event.preventDefault(); event.returnValue = '' } }
@@ -113,7 +129,8 @@ onBeforeRouteLeave(canLeave)
 </script>
 <style scoped>
 .content-editor { max-width:1220px; margin:0 auto; padding-bottom:84px; }
-.editor-header { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:28px; }
+.editor-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+.editor-header > * + * { margin-left:20px; }
 .editor-header .el-button.is-text { margin-left:-12px; }
 .editor-header h2 { font-size:24px; margin:12px 0 8px; }
 .editor-header p,.section-help { color:#667688; font-size:14px; line-height:1.6; margin:0; }
@@ -122,7 +139,9 @@ onBeforeRouteLeave(canLeave)
 h3 { margin:0 0 18px; font-size:17px; color:#253c52; }
 .section-help { margin:-6px 0 20px; }
 .field-pair { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-.editor-form :deep(.el-select),.editor-form :deep(.el-date-editor) { width:100%; }
+.editor-form :deep(.el-select),.editor-form :deep(.el-date-editor),.editor-form :deep(.el-autocomplete) { width:100%; }
+.quick-tags { display:flex; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:12px; color:#667688; }
+.quick-tags .el-button { margin-left:4px; }
 .editor-form :deep(.el-form-item__label) { font-weight:500; color:#34495e; }
 .editor-form :deep(.el-form-item__content) { display:block; }
 .help { font-size:12px; color:#667688; margin:6px 0 0; }
@@ -131,7 +150,13 @@ h3 { margin:0 0 18px; font-size:17px; color:#253c52; }
 .publish-settings label { display:block; font-size:14px; margin-bottom:10px; }
 .editing-guide { border-top:1px solid #dce4ed; padding-top:20px; font-size:13px; color:#526779; }
 .editing-guide ol { padding-left:20px; line-height:2.2; margin-bottom:0; }
-.editor-footer { position:sticky; bottom:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 0; background:#fff; border-top:1px solid #dce4ed; }
+.editor-footer { position:sticky; bottom:0; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:16px 0; background:#fff; border-top:1px solid #dce4ed; }
+.editor-footer > * + * { margin-left:12px; }
+/* 窄屏时布局底部有留白，固定在底部会悬空并露出下面的内容，改为跟随页面 */
+@media (max-width: 991px) { .editor-footer { position:static; } }
+.preview-tags { display:flex; flex-wrap:wrap; align-items:center; margin:4px 0 8px; }
+.preview-tags > * { margin:0 6px 6px 0; padding:2px 8px; border-radius:4px; background:#eef6ff; color:#2a6db0; font-size:12px; }
+.preview-tags > b { background:#3d8bea; color:#fff; font-weight:600; }
 .editor-footer span { font-size:13px; color:#63758a; }
 .content-preview { color:#253c52; line-height:1.8; overflow-wrap:anywhere; }
 .content-preview img { width:100%; height:auto; border-radius:6px; }

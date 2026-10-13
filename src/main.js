@@ -1,3 +1,4 @@
+import './utils/legacy-polyfills' // 必须最先加载：旧内核浏览器（如搜狗 Chrome 80）兼容
 import { createApp } from 'vue'
 
 import Cookies from 'js-cookie'

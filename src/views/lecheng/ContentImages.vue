@@ -40,7 +40,8 @@ async function upload(event) {
 }
 </script>
 <style scoped>
-.pictures { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; }
+.pictures { display:flex; flex-wrap:wrap; align-items:flex-start; margin-bottom:-12px; }
+.pictures > * { margin:0 12px 12px 0; }
 .picture { width:144px; border:1px solid #dce3eb; border-radius:6px; overflow:hidden; background:white; }
 .picture .el-image { display:block; width:142px; height:108px; font-size:12px; }
 .picture-actions { display:flex; justify-content:space-around; }

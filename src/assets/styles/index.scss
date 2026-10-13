@@ -4,6 +4,7 @@
 @use './sidebar.scss';
 @use './btn.scss';
 @use './ruoyi.scss';
+@use './legacy-gap.scss'; // 旧内核浏览器（搜狗 Chrome 80）间距补丁
 
 body {
   height: 100%;

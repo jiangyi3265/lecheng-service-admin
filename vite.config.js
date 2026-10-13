@@ -29,6 +29,8 @@ export default defineConfig(({ mode, command }) => {
     build: {
       // https://vite.dev/config/build-options.html
       sourcemap: command === 'build' ? false : 'inline',
+      // 运营人员使用搜狗等 Chrome 80 内核浏览器，语法需降到 Chrome 80 能运行
+      target: ['chrome80', 'edge88', 'firefox78', 'safari14'],
       outDir: 'dist',
       assetsDir: 'assets',
       chunkSizeWarningLimit: 2000,

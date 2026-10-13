@@ -13,10 +13,10 @@
           <el-button v-hasPermi="['lecheng:content:edit']" type="primary" :disabled="loading" @click="createContent">添加{{ kindLabel }}</el-button>
         </div>
         <div class="content-filters"><el-input v-model="searchText" clearable placeholder="输入名称查找内容" aria-label="查找内容" /><el-select v-model="statusFilter" placeholder="全部状态" aria-label="展示状态"><el-option label="全部状态" value="" /><el-option label="正在展示" value="1" /><el-option label="未展示 / 草稿" value="0" /></el-select><span>共 {{ visibleContent.length }} 条内容</span></div>
-        <el-table v-loading="loading" :data="visibleContent" empty-text="这里还没有内容，点击上方按钮添加。">
+        <el-table v-loading="loading" :data="visibleContent" :empty-text="searchText.trim() || statusFilter ? '没有找到符合条件的内容，可以换个关键词或清空筛选。' : '这里还没有内容，点击上方按钮添加。'">
           <el-table-column label="封面" width="100"><template #default="{ row }"><el-image v-if="row.coverImage" :src="row.coverImage" fit="cover" class="list-thumbnail" /><span v-else class="muted-label">示意图片</span></template></el-table-column>
           <el-table-column label="名称" min-width="220"><template #default="{ row }">{{ kind === 'news' ? row.title : row.name }}</template></el-table-column>
-          <el-table-column label="分类" prop="category" min-width="120" />
+          <el-table-column label="分类" min-width="120"><template #default="{ row }">{{ kind === 'hospital' ? [row.type, ...(row.tags || []).slice(0, 2)].filter(Boolean).join(' · ') : kind === 'doctor' ? row.department : row.category }}</template></el-table-column>
           <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === '1' ? 'success' : 'info'">{{ row.status === '1' ? '展示中' : '未展示' }}</el-tag></template></el-table-column>
           <el-table-column label="排序" prop="sortOrder" width="85" />
           <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }">
@@ -35,8 +35,8 @@
           <div class="conversation-panel">
             <template v-if="selectedSession">
               <h3>会话记录</h3>
-              <div class="message-list"><div v-for="item in messages" :key="item.id" class="message" :class="item.role"><span>{{ item.role === 'user' ? '用户' : '客服' }}</span><p>{{ item.text }}</p></div></div>
-              <div class="reply-row"><el-input v-model="replyText" type="textarea" :rows="2" maxlength="1000" show-word-limit placeholder="输入回复" /><el-button v-hasPermi="['lecheng:consult:reply']" type="primary" :loading="saving" @click="sendReply">回复</el-button></div>
+              <div ref="messageList" class="message-list"><div v-for="item in messages" :key="item.id" class="message" :class="item.role"><span>{{ item.role === 'user' ? '用户' : '客服' }}</span><p>{{ item.text }}</p></div></div>
+              <div class="reply-row"><el-input v-model="replyText" type="textarea" :rows="2" maxlength="1000" show-word-limit placeholder="输入回复内容" /><el-button v-hasPermi="['lecheng:consult:reply']" type="primary" :loading="saving" :disabled="!replyText.trim()" @click="sendReply">回复</el-button></div>
             </template>
             <el-empty v-else description="选择一条咨询会话" />
           </div>
@@ -49,7 +49,7 @@
           <el-table-column prop="phone" label="电话" width="145" /><el-table-column prop="hospitalName" label="医院" min-width="180" />
           <el-table-column prop="doctorName" label="医生" width="120" /><el-table-column prop="date" label="日期" width="120" />
           <el-table-column prop="slot" label="时段" width="140" /><el-table-column prop="status" label="状态" width="100" />
-          <el-table-column label="处理" width="165"><template #default="{ row }"><el-button v-if="row.status === '待处理'" v-hasPermi="['lecheng:booking:edit']" link type="primary" @click="setAppointment(row, '已联系')">标记已联系</el-button></template></el-table-column>
+          <el-table-column label="处理" width="120" fixed="right"><template #default="{ row }"><el-button v-if="row.status === '待处理'" v-hasPermi="['lecheng:booking:edit']" link type="primary" @click="setAppointment(row, '已联系')">标记已联系</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
       <el-tab-pane label="用户反馈" name="feedback">
@@ -65,7 +65,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listContent, deleteContent, listConsultations, listMessages, replyConsultation, listAppointments, updateAppointment, listFeedback, updateFeedback } from '@/api/lecheng'
@@ -143,12 +143,24 @@ async function refresh() {
 function createContent() { editorSource.value = { sortOrder: content.value.length }; editorOpen.value = true; loadHospitalOptions().catch(() => {}) }
 function editContent(row) { editorSource.value = row; editorOpen.value = true; loadHospitalOptions().catch(() => {}) }
 async function contentSaved() { editorOpen.value = false; await loadContent() }
-async function removeContent(row) { await ElMessageBox.confirm(`确定删除“${kind.value === 'news' ? row.title : row.name}”？`, '删除内容', { type: 'warning' }); await deleteContent(row.id); ElMessage.success('已删除'); await loadContent() }
+async function removeContent(row) { const ok = await ElMessageBox.confirm(`确定删除“${kind.value === 'news' ? row.title : row.name}”？`, '删除内容', { type: 'warning' }).then(() => true, () => false); if (!ok) return; await deleteContent(row.id); ElMessage.success('已删除'); await loadContent() }
 let messageRequest = 0
+const messageList = ref()
+let scrolledSession = ''
 async function loadSelectedMessages() {
   const session = selectedSession.value, requestId = ++messageRequest
   const rows = (await listMessages(session)).data || []
-  if (requestId === messageRequest && selectedSession.value === session) messages.value = rows
+  if (requestId !== messageRequest || selectedSession.value !== session) return
+  const el = messageList.value
+  const nearBottom = !!el && el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  const grew = rows.length > messages.value.length
+  messages.value = rows
+  // 刚打开会话，或有新消息且原本停在底部时，滚到最新一条
+  if (scrolledSession !== session || (grew && nearBottom)) {
+    scrolledSession = session
+    await nextTick()
+    if (messageList.value) messageList.value.scrollTop = messageList.value.scrollHeight
+  }
 }
 async function selectConsultation(row) {
   if (!row || row.sessionId === selectedSession.value) return
@@ -162,11 +174,12 @@ async function sendReply() {
   try {
     await replyConsultation(session, text)
     if (selectedSession.value === session) replyText.value = ''
+    scrolledSession = '' // 发送后滚到最新
     await refresh(); ElMessage.success('回复已发送')
   } finally { saving.value = false }
 }
-async function setAppointment(row, status) { await updateAppointment(Number(row.id.slice(2)), status); await refresh() }
-async function setFeedback(row, status) { await updateFeedback(row.id, status); await refresh() }
+async function setAppointment(row, status) { await updateAppointment(Number(row.id.slice(2)), status); ElMessage.success('预约 ' + row.id + ' 已标记为' + status); await refresh() }
+async function setFeedback(row, status) { await updateFeedback(row.id, status); ElMessage.success('反馈 ' + row.id + ' 已标记为' + status); await refresh() }
 let consultationPoller
 watch(() => route.path, () => { if (applyMenuSection()) refresh() })
 onMounted(() => {
@@ -185,21 +198,24 @@ onUnmounted(() => clearInterval(consultationPoller))
 .page-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
 .page-heading h2 { margin: 0 0 5px; font-size: 23px; }
 .page-heading p { margin: 0; color: #7b8794; }
-.toolbar { display: flex; justify-content: space-between; gap: 16px; margin: 12px 0 20px; }
-.content-filters { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+.toolbar { display: flex; justify-content: space-between; margin: 12px 0 20px; }
+.toolbar > * + * { margin-left: 16px; }
+.content-filters { display:flex; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+.content-filters > * { margin: 0 12px 12px 0; }
 .content-filters .el-input { width:280px; }.content-filters .el-select { width:160px; }.content-filters span { font-size:13px; color:#63758a; }
 .list-thumbnail { width:68px; height:48px; border-radius:5px; }.muted-label { color:#8393a3; font-size:12px; }
 .table-tip { margin-bottom: 18px; }
 .consult-layout { display: grid; grid-template-columns: minmax(320px, 42%) 1fr; gap: 18px; min-height: 500px; }
 .conversation-panel { display: flex; flex-direction: column; min-height: 500px; border: 1px solid #e8edf2; border-radius: 8px; padding: 18px; }
 .conversation-panel h3 { margin: 0 0 12px; }
-.message-list { flex: 1; overflow-y: auto; max-height: 520px; background: #f5f7fa; padding: 16px; }
+.message-list { flex: 1; overflow-y: auto; max-height: max(240px, calc(100vh - 400px)); background: #f5f7fa; padding: 16px; }
 .message { max-width: 78%; margin-bottom: 14px; }
 .message.assistant { margin-left: auto; text-align: right; }
 .message span { font-size: 12px; color: #7e8b9b; }
 .message p { text-align: left; margin: 5px 0 0; padding: 11px 14px; background: white; border-radius: 8px; white-space: pre-wrap; line-height: 1.5; }
 .message.assistant p { background: #d9edff; }
-.reply-row { display: flex; align-items: flex-end; gap: 12px; margin-top: 14px; }
+.reply-row { display: flex; align-items: flex-end; margin-top: 14px; }
+.reply-row > * + * { margin-left: 12px; }
 .field-help { margin-top: 5px; color: #8291a1; font-size: 12px; }
 @media (max-width: 900px) { .consult-layout { grid-template-columns: 1fr; } .toolbar { flex-wrap: wrap; } }
 </style>

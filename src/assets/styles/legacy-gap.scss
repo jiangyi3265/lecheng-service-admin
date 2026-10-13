@@ -1,0 +1,16 @@
+// 旧内核浏览器（不支持 flex gap，如搜狗 Chrome 80）下 Element Plus 组件的间距补丁。
+// 只有 <html class="no-flexgap"> 时生效（检测见 src/utils/legacy-polyfills.js），新浏览器不受影响。
+.no-flexgap {
+  .el-select__selection > .el-select__selected-item:not(:last-child),
+  .el-input-tag__inner > *:not(:last-child) { margin-right: 6px; }
+  // 标签换行时上下两行之间也留出间距
+  .el-select__selection > .el-select__selected-item,
+  .el-input-tag__inner > * { margin-top: 3px; margin-bottom: 3px; }
+  .el-select__wrapper > * + * { margin-left: 6px; }
+  .el-input-tag__suffix > * + * { margin-left: 8px; }
+  .el-image-viewer__actions__inner > * + * { margin-left: 22px; }
+  .el-message > * + * { margin-left: 8px; }
+  .el-message-box__container > * + * { margin-left: 12px; }
+}
+// Element Plus 只写了 :focus-visible（Chrome 86+），旧浏览器点表格时会出现整块焦点框
+.el-table tbody:focus { outline: none; }

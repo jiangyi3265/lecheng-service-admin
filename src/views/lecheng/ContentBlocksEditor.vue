@@ -22,19 +22,31 @@
 </template>
 <script setup>
 import { ref } from 'vue'
+import { ElMessageBox } from 'element-plus'
 import ContentImages from './ContentImages.vue'
+import { uid } from './content-model.mjs'
 const props = defineProps({ modelValue: { type: Array, default: () => [] } })
 const emit = defineEmits(['update:modelValue', 'busy'])
-const busy = ref(false), keys = ref(props.modelValue.map(() => crypto.randomUUID()))
+const busy = ref(false), keys = ref(props.modelValue.map(() => uid()))
 function setBusy(value) { busy.value = value; emit('busy', value) }
-function add(type) { keys.value.push(crypto.randomUUID()); emit('update:modelValue', [...props.modelValue, type === 'text' ? { type, title: '', text: '' } : { type, url: '', caption: '' }]) }
+function add(type) { keys.value.push(uid()); emit('update:modelValue', [...props.modelValue, type === 'text' ? { type, title: '', text: '' } : { type, url: '', caption: '' }]) }
 function update(index, field, value) { emit('update:modelValue', props.modelValue.map((b, i) => i === index ? { ...b, [field]: value } : b)) }
-function remove(index) { keys.value.splice(index, 1); emit('update:modelValue', props.modelValue.filter((_, i) => i !== index)) }
+// 有内容的段落删除前先确认，避免误删一大段文字
+async function remove(index) {
+  const b = props.modelValue[index]
+  const hasContent = b.type === 'image' ? (b.url || b.caption?.trim()) : (b.text?.trim() || b.title?.trim())
+  if (hasContent) {
+    const ok = await ElMessageBox.confirm('确定删除这一段内容？删除后不能恢复。', '删除内容', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '保留' }).then(() => true, () => false)
+    if (!ok) return
+  }
+  keys.value.splice(index, 1); emit('update:modelValue', props.modelValue.filter((_, i) => i !== index))
+}
 function move(index, offset) { const list = [...props.modelValue]; [list[index], list[index + offset]] = [list[index + offset], list[index]]; [keys.value[index], keys.value[index + offset]] = [keys.value[index + offset], keys.value[index]]; emit('update:modelValue', list) }
 </script>
 <style scoped>
 .block { margin-bottom:16px; padding:14px; background:#f7f9fc; border:1px solid #e0e6ee; border-radius:6px; }
-.block-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+.block-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.block-toolbar > * + * { margin-left:8px; }
 .block-toolbar strong { font-size:13px; color:#536478; }
 .block :deep(.el-textarea), .block > .el-input:last-child { margin-top:10px; }
 .empty-copy { margin:0 0 16px; color:#667688; font-size:14px; }
