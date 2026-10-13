@@ -35,7 +35,7 @@ const classObj = computed(() => ({
 }))
 
 const { width, height } = useWindowSize()
-const WIDTH = 992 // refer to Bootstrap's responsive design
+const WIDTH = 600 // 竖屏手机才收起侧边栏；手机横屏与平板保持左侧菜单可见
 
 watch(() => device.value, () => {
   if (device.value === 'mobile' && sidebar.value.opened) {

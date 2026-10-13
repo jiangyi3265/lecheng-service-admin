@@ -3,13 +3,13 @@
     <ContentEditor v-if="editorOpen" :source="editorSource" :section="kind" :hospitals="hospitalOptions" @close="editorOpen = false" @saved="contentSaved" />
     <template v-else>
     <div class="page-heading">
-      <div><h2>乐城运营</h2><p>管理小程序里的图片、文字和客户咨询</p></div>
+      <div><h2>{{ menuSection ? menuSection.title : '乐城运营' }}</h2><p>{{ menuSection ? menuSection.hint : '管理小程序里的图片、文字和客户咨询' }}</p></div>
       <el-button @click="refresh">刷新当前列表</el-button>
     </div>
-    <el-tabs v-model="active" @tab-change="refresh">
+    <el-tabs v-model="active" :class="{ 'menu-mode': !!menuSection }" @tab-change="refresh">
       <el-tab-pane label="内容管理" name="content">
         <div class="toolbar">
-          <el-segmented v-model="kind" :options="contentKinds" @change="loadContent" />
+          <el-segmented v-if="!menuSection" v-model="kind" :options="contentKinds" @change="loadContent" /><span v-else />
           <el-button v-hasPermi="['lecheng:content:edit']" type="primary" :disabled="loading" @click="createContent">添加{{ kindLabel }}</el-button>
         </div>
         <div class="content-filters"><el-input v-model="searchText" clearable placeholder="输入名称查找内容" aria-label="查找内容" /><el-select v-model="statusFilter" placeholder="全部状态" aria-label="展示状态"><el-option label="全部状态" value="" /><el-option label="正在展示" value="1" /><el-option label="未展示 / 草稿" value="0" /></el-select><span>共 {{ visibleContent.length }} 条内容</span></div>
@@ -65,7 +65,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listContent, deleteContent, listConsultations, listMessages, replyConsultation, listAppointments, updateAppointment, listFeedback, updateFeedback } from '@/api/lecheng'
 
@@ -74,6 +75,29 @@ import { sections, belongsToSection } from './content-model.mjs'
 
 const active = ref('content')
 const kind = ref('hospital')
+
+// 左侧菜单每一项对应地址最后一段（如 /lecheng/hospital），据此直接打开对应栏目；旧地址 /lecheng 仍显示原来的选项卡
+const MENU_SECTIONS = {
+  hospital: { tab: 'content', kind: 'hospital', title: '医院管理', hint: '小程序首页与查询里的医院介绍' },
+  project: { tab: 'content', kind: 'project', title: '批复项目', hint: '查询页“批复项目”分类的内容' },
+  medicine: { tab: 'content', kind: 'medicine', title: '特许药械', hint: '查询页“特许药械”分类的内容' },
+  wellness: { tab: 'content', kind: 'wellness', title: '亚健康项目', hint: '查询页“亚健康项目”分类的内容' },
+  news: { tab: 'content', kind: 'news', title: '乐城动态', hint: '首页乐城动态与动态页的资讯' },
+  doctor: { tab: 'content', kind: 'doctor', title: '医生管理', hint: '科室与预约页面里的医生资料' },
+  consultations: { tab: 'consultations', title: '客服咨询', hint: '查看小程序客服留言并回复' },
+  appointments: { tab: 'appointments', title: '预约申请', hint: '用户提交的预约咨询申请' },
+  feedback: { tab: 'feedback', title: '用户反馈', hint: '用户提交的意见反馈' }
+}
+const route = useRoute()
+const menuSection = computed(() => MENU_SECTIONS[String(route.path).split('/').filter(Boolean).pop()] || null)
+function applyMenuSection() {
+  const section = menuSection.value
+  if (!section) return false
+  editorOpen.value = false
+  active.value = section.tab
+  if (section.kind) kind.value = section.kind
+  return true
+}
 const contentKinds = sections
 const apiKind = computed(() => sections.find(s => s.value === kind.value).kind)
 const searchText = ref(''), statusFilter = ref('')
@@ -144,7 +168,9 @@ async function sendReply() {
 async function setAppointment(row, status) { await updateAppointment(Number(row.id.slice(2)), status); await refresh() }
 async function setFeedback(row, status) { await updateFeedback(row.id, status); await refresh() }
 let consultationPoller
+watch(() => route.path, () => { if (applyMenuSection()) refresh() })
 onMounted(() => {
+  applyMenuSection()
   refresh()
   consultationPoller = setInterval(() => {
     if (active.value === 'consultations' && !loading.value && !saving.value) refresh().catch(() => {})
@@ -155,6 +181,7 @@ onUnmounted(() => clearInterval(consultationPoller))
 
 <style scoped>
 .lecheng-console { color: #22334a; }
+.menu-mode :deep(.el-tabs__header) { display: none; }
 .page-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
 .page-heading h2 { margin: 0 0 5px; font-size: 23px; }
 .page-heading p { margin: 0; color: #7b8794; }
