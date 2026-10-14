@@ -56,7 +56,7 @@
         <el-table v-loading="loading" :data="feedback" border>
           <el-table-column prop="id" label="编号" width="100" /><el-table-column prop="text" label="内容" min-width="350" />
           <el-table-column prop="status" label="状态" width="110" />
-          <el-table-column label="处理" width="150"><template #default="{ row }"><el-button v-if="row.status === '待处理'" v-hasPermi="['lecheng:feedback:edit']" link type="primary" @click="setFeedback(row, '已处理')">标记已处理</el-button></template></el-table-column>
+          <el-table-column label="处理" width="150" fixed="right"><template #default="{ row }"><el-button v-if="row.status === '待处理'" v-hasPermi="['lecheng:feedback:edit']" link type="primary" @click="setFeedback(row, '已处理')">标记已处理</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
     </el-tabs>
