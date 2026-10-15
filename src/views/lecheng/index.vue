@@ -4,7 +4,7 @@
     <template v-else>
     <div class="page-heading">
       <div><h2>{{ heading ? heading.title : '乐城运营' }}<span v-if="active === 'consultations' && totalUnread" class="unread-badge heading-badge" :aria-label="'未读消息 ' + totalUnread + ' 条'">{{ unreadText(totalUnread) }}</span></h2><p>{{ heading ? heading.hint : '管理小程序里的图片、文字和客户咨询' }}</p></div>
-      <el-button v-if="active !== 'support'" @click="refresh()">刷新当前列表</el-button>
+      <el-button v-if="!SETTINGS_TABS.includes(active)" @click="refresh()">刷新当前列表</el-button>
     </div>
     <el-tabs v-model="active" :class="{ 'menu-mode': !!menuSection }" :before-leave="beforeTabLeave" @tab-change="refresh()">
       <el-tab-pane label="内容管理" name="content">
@@ -13,10 +13,11 @@
           <el-button v-hasPermi="['lecheng:content:edit']" type="primary" :disabled="loading" @click="createContent">添加{{ kindLabel }}</el-button>
         </div>
         <div class="content-filters"><el-input v-model="searchText" clearable placeholder="输入名称查找内容" aria-label="查找内容" /><el-select v-model="statusFilter" placeholder="全部状态" aria-label="展示状态"><el-option label="全部状态" value="" /><el-option label="正在展示" value="1" /><el-option label="未展示 / 草稿" value="0" /></el-select><span>共 {{ visibleContent.length }} 条内容</span></div>
-        <el-table v-loading="loading" :data="visibleContent" :empty-text="searchText.trim() || statusFilter ? '没有找到符合条件的内容，可以换个关键词或清空筛选。' : '这里还没有内容，点击上方按钮添加。'">
-          <el-table-column :label="kind === 'about' ? '配图' : '封面'" width="100"><template #default="{ row }"><el-image v-if="row.coverImage" :src="row.coverImage" fit="cover" class="list-thumbnail" /><span v-else class="muted-label">示意图片</span></template></el-table-column>
-          <el-table-column :label="kind === 'policy' ? '政策标题' : kind === 'about' ? '段落标题' : '名称'" min-width="220"><template #default="{ row }">{{ row[titleKey(kind)] }}</template></el-table-column>
-          <el-table-column :label="kind === 'policy' ? '成文日期 · 标签' : kind === 'about' ? '图片说明' : '分类'" min-width="120"><template #default="{ row }">{{ categoryText(row) }}</template></el-table-column>
+        <el-alert v-if="kind === 'banner' && !loading && !content.some(row => row.status === '1')" type="info" show-icon :closable="false" class="table-tip" title="目前没有正在展示的轮播图，小程序首页会显示默认的两张轮播图（走进乐城、你好，乐城）。" />
+        <el-table v-loading="loading" :data="visibleContent" :empty-text="emptyText">
+          <el-table-column :label="COLUMN_LABELS.cover[kind] || '封面'" width="100"><template #default="{ row }"><el-image v-if="row.coverImage" :src="row.coverImage" fit="cover" class="list-thumbnail" /><span v-else-if="SCENE_KINDS.includes(kind)" class="list-thumbnail scene-thumbnail" :style="sceneStyle(row.scene)" role="img" aria-label="默认插画" title="未上传图片，显示默认插画" /><span v-else class="muted-label">示意图片</span></template></el-table-column>
+          <el-table-column :label="COLUMN_LABELS.title[kind] || '名称'" min-width="220"><template #default="{ row }">{{ row[titleKey(kind)] }}</template></el-table-column>
+          <el-table-column :label="COLUMN_LABELS.category[kind] || '分类'" min-width="120"><template #default="{ row }">{{ categoryText(row) }}</template></el-table-column>
           <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === '1' ? 'success' : 'info'">{{ row.status === '1' ? '展示中' : '未展示' }}</el-tag></template></el-table-column>
           <el-table-column label="排序" prop="sortOrder" width="85" />
           <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }">
@@ -71,6 +72,9 @@
         <el-button v-if="menuSection && menuSection.tab !== 'support'" text class="back-button" @click="leaveSupport">← 返回{{ menuSection.title }}</el-button>
         <SupportSettings v-if="active === 'support'" ref="supportRef" />
       </el-tab-pane>
+      <el-tab-pane label="园区导航" name="guide">
+        <ParkGuideSettings v-if="active === 'guide'" ref="guideRef" />
+      </el-tab-pane>
     </el-tabs>
     </template>
   </div>
@@ -86,13 +90,16 @@ import { lechengUnread, refreshLechengUnread, unreadText } from '@/utils/lecheng
 
 import ContentEditor from './ContentEditor.vue'
 import SupportSettings from './SupportSettings.vue'
+import ParkGuideSettings from './ParkGuideSettings.vue'
 import { sections, belongsToSection, titleKey, itemLabel } from './content-model.mjs'
+import { sceneStyle } from './scene-atlas'
 
 const active = ref('content')
 const kind = ref('hospital')
 
 // 左侧菜单每一项对应地址最后一段（如 /lecheng/hospital），据此直接打开对应栏目；旧地址 /lecheng 仍显示原来的选项卡
 const MENU_SECTIONS = {
+  banner: { tab: 'content', kind: 'banner', title: '首页轮播', hint: '首页最上方的大图轮播（建议 2–5 张）' },
   hospital: { tab: 'content', kind: 'hospital', title: '医院管理', hint: '小程序首页与查询里的医院介绍' },
   project: { tab: 'content', kind: 'project', title: '批复项目', hint: '查询页“批复项目”分类的内容' },
   medicine: { tab: 'content', kind: 'medicine', title: '特许药械', hint: '查询页“特许药械”分类的内容' },
@@ -101,13 +108,18 @@ const MENU_SECTIONS = {
   policy: { tab: 'content', kind: 'policy', title: '国家政策', hint: '首页“乐城介绍 → 国家政策”的政策文件' },
   about: { tab: 'content', kind: 'about', title: '了解乐城', hint: '首页“乐城介绍 → 了解乐城”的图文介绍' },
   doctor: { tab: 'content', kind: 'doctor', title: '医生管理', hint: '科室与预约页面里的医生资料' },
+  benefit: { tab: 'content', kind: 'benefit', title: '福利活动', hint: '“我的 → 福利活动”里的活动' },
+  process: { tab: 'content', kind: 'process', title: '服务流程', hint: '“我的 → 服务流程”里的说明' },
+  'park-guide': { tab: 'guide', title: '园区导航', hint: '“我的 → 园区导航”的地图位置和说明' },
   consultations: { tab: 'consultations', title: '客服咨询', hint: '查看小程序客服留言并回复' },
-  'support-settings': { tab: 'support', title: '客服设置', hint: '小程序客服页的头像、开场白和在线时间' },
+  'support-settings': { tab: 'support', title: '客服设置', hint: '小程序客服页的头像、开场白，以及“我的”页的联系方式' },
   appointments: { tab: 'appointments', title: '预约申请', hint: '用户提交的预约咨询申请' },
   feedback: { tab: 'feedback', title: '用户反馈', hint: '用户提交的意见反馈' }
 }
 // 旧地址 /lecheng?tab=consultations 可直接打开对应选项卡（新消息提醒在没有独立菜单时用到）
-const LEGACY_TABS = ['content', 'consultations', 'appointments', 'feedback', 'support']
+const LEGACY_TABS = ['content', 'consultations', 'appointments', 'feedback', 'support', 'guide']
+// 单条设置页（不是列表）：没有“刷新当前列表”，离开前检查未保存的修改
+const SETTINGS_TABS = ['support', 'guide']
 const SUPPORT_ROUTE = 'LechengSupportSettings'
 const route = useRoute()
 const router = useRouter()
@@ -145,16 +157,37 @@ const feedback = ref([])
 const editorOpen = ref(false)
 const editorSource = ref({})
 const supportRef = ref()
+const guideRef = ref()
 const canReply = auth.hasPermi('lecheng:consult:reply')
 const totalUnread = computed(() => consultations.value.reduce((sum, row) => sum + (Number(row.unreadCount) > 0 ? Number(row.unreadCount) : 0), 0))
 const unreadSessions = computed(() => consultations.value.filter(row => Number(row.unreadCount) > 0).length)
 
+// 列表各栏标题：不同栏目叫法不同，没列出的用默认的“封面 / 名称 / 分类”
+const COLUMN_LABELS = {
+  cover: { about: '配图', banner: '轮播图片' },
+  title: { policy: '政策标题', about: '段落标题', banner: '大标题', benefit: '活动标题', process: '标题' },
+  category: { policy: '成文日期 · 标签', about: '图片说明', banner: '小标题', benefit: '活动时间', process: '列表摘要' }
+}
+// 没上传图片时，小程序显示默认插画的栏目（列表里也显示对应插画）
+const SCENE_KINDS = ['banner', 'benefit', 'process']
+const emptyText = computed(() => {
+  if (searchText.value.trim() || statusFilter.value) return '没有找到符合条件的内容，可以换个关键词或清空筛选。'
+  if (kind.value === 'benefit') return '还没有福利活动，点击上方按钮添加；小程序里会显示“暂无福利活动”。'
+  if (kind.value === 'banner') return '还没有轮播图，点击上方按钮添加；没有轮播图时小程序首页显示默认的两张。'
+  return '这里还没有内容，点击上方按钮添加。'
+})
+const firstParagraph = row => { const p = (Array.isArray(row.paragraphs) ? row.paragraphs : []).map(item => typeof item === 'string' ? item : item && item.text).find(text => String(text || '').trim()); return p || '' }
+const shorten = (value, max) => { const text = String(value || '').replace(/\s+/g, ' ').trim(); return text.length > max ? text.slice(0, max) + '…' : text }
 // 列表“分类”一栏：不同栏目显示不同的信息
 function categoryText(row) {
   if (kind.value === 'hospital') return [row.type, ...(row.tags || []).slice(0, 2)].filter(Boolean).join(' · ')
   if (kind.value === 'doctor') return row.department
   if (kind.value === 'policy') return [row.date, ...(row.tags || [])].filter(Boolean).join(' · ')
   if (kind.value === 'about') return row.caption
+  if (kind.value === 'banner') return row.subtitle
+  if (kind.value === 'benefit') return row.period || '—'
+  // 没写摘要时和小程序列表一样，显示正文第一段
+  if (kind.value === 'process') return shorten(row.summary || firstParagraph(row), 30)
   return row.category
 }
 
@@ -173,7 +206,7 @@ async function loadContent() {
 async function refresh(options) {
   const silent = !!(options && options.silent === true)
   if (active.value === 'content') return loadContent()
-  if (active.value === 'support') return
+  if (SETTINGS_TABS.includes(active.value)) return
   if (!silent) loading.value = true
   try {
     if (active.value === 'consultations') await loadConsultations(silent)
@@ -280,10 +313,11 @@ async function leaveSupport() {
   active.value = menuSection.value.tab
   refresh()
 }
-// 点选项卡离开“客服设置”时，有未保存的修改先确认（代码切换选项卡时 active 已是新值，不拦）
+// 点选项卡离开“客服设置”“园区导航”时，有未保存的修改先确认（代码切换选项卡时 active 已是新值，不拦）
 function beforeTabLeave(name, oldName) {
-  if (oldName !== 'support' || name === active.value || !supportRef.value) return true
-  return supportRef.value.canLeave()
+  const settings = oldName === 'support' ? supportRef.value : oldName === 'guide' ? guideRef.value : null
+  if (!settings || name === active.value) return true
+  return settings.canLeave()
 }
 
 async function setAppointment(row, status) { await updateAppointment(Number(row.id.slice(2)), status); ElMessage.success('预约 ' + row.id + ' 已标记为' + status); await refresh() }
@@ -325,7 +359,8 @@ onUnmounted(() => {
 .content-filters { display:flex; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
 .content-filters > * { margin: 0 12px 12px 0; }
 .content-filters .el-input { width:280px; }.content-filters .el-select { width:160px; }.content-filters span { font-size:13px; color:#63758a; }
-.list-thumbnail { width:68px; height:48px; border-radius:5px; }.muted-label { color:#8393a3; font-size:12px; }
+.list-thumbnail { width:68px; height:48px; border-radius:5px; }
+.scene-thumbnail { display:block; opacity:.85; }.muted-label { color:#8393a3; font-size:12px; }
 .table-tip { margin-bottom: 18px; }
 /* 未读数红色角标（与左侧菜单一致） */
 .unread-badge { display: inline-block; box-sizing: border-box; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--el-color-danger, #f56c6c); color: #fff; font-size: 12px; font-weight: 600; line-height: 18px; text-align: center; vertical-align: middle; }

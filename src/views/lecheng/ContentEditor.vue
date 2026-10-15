@@ -8,12 +8,21 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="editor-form" :disabled="saving" scroll-to-error :scroll-into-view-options="{ block: 'center' }">
         <section>
           <h3>基本信息</h3>
-          <el-form-item :label="nameLabel" :prop="titleField"><el-input v-model="form[titleField]" maxlength="200" show-word-limit :placeholder="'请输入' + nameLabel" /><p v-if="section === 'policy'" class="help">显示在政策列表中，建议简短，例如“临床急需医疗器械政策”。</p></el-form-item>
+          <el-form-item :label="nameLabel" :prop="titleField"><el-input v-model="form[titleField]" :maxlength="section === 'banner' ? 20 : 200" show-word-limit :placeholder="section === 'banner' ? '例如：走进乐城' : '请输入' + nameLabel" /><p v-if="section === 'policy'" class="help">显示在政策列表中，建议简短，例如“临床急需医疗器械政策”。</p><p v-else-if="section === 'banner'" class="help">首页大图上的大字，建议不超过 10 个字，太长会换行。</p></el-form-item>
           <template v-if="section === 'policy'">
             <el-form-item label="完整标题"><el-input v-model="form.fullTitle" type="textarea" :autosize="{ minRows: 1, maxRows: 4 }" maxlength="300" show-word-limit placeholder="政策文件的正式名称，用户展开后显示" /></el-form-item>
             <div class="field-pair"><el-form-item label="成文日期"><el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item><el-form-item label="标签"><el-input-tag :model-value="form.tags" :max="6" :delimiter="TAG_DELIMITER" save-on-blur clearable placeholder="直接输入，逗号、空格或回车分隔" @update:model-value="form.tags = [...new Set($event || [])]" /><div class="quick-tags"><span>常用：</span><el-button v-for="tag in ['政策文件', '建设发展', '医疗器械', '特许药品']" :key="tag" size="small" text :disabled="form.tags.includes(tag) || form.tags.length >= 6" @click="form.tags = [...form.tags, tag]">＋{{ tag }}</el-button></div></el-form-item></div>
           </template>
-          <el-form-item :label="section === 'doctor' ? '医生照片' : section === 'about' ? '配图' : '封面图片'"><ContentImages :model-value="form.coverImage ? [form.coverImage] : []" :disabled="saving" :hint="coverHint" @update:model-value="form.coverImage = $event[0] || ''" @busy="trackUpload" /><p v-if="source.id && !form.coverImage && !coverHint" class="help">未上传时沿用原来的示意图片。</p></el-form-item>
+          <el-form-item v-if="section === 'banner'" label="小标题"><el-input v-model="form.subtitle" maxlength="30" show-word-limit placeholder="例如：发现身边的优质医疗" /><p class="help">显示在大标题下方的一行小字；不填则只显示大标题。</p></el-form-item>
+          <el-form-item v-if="section === 'benefit'" label="活动时间"><el-input v-model="form.period" maxlength="50" show-word-limit placeholder="例如：2026-11-01 至 2026-11-30" /><p class="help">直接填写文字，显示在活动详情的标题下方；长期有效的活动可以不填。</p></el-form-item>
+          <el-form-item :label="coverLabel"><ContentImages :model-value="form.coverImage ? [form.coverImage] : []" :disabled="saving" :hint="coverHint" @update:model-value="form.coverImage = $event[0] || ''" @busy="trackUpload" /><p v-if="source.id && !form.coverImage && !coverHint" class="help">未上传时沿用原来的示意图片。</p></el-form-item>
+          <template v-if="section === 'banner'">
+            <el-form-item label="默认插画">
+              <div class="scene-options" role="radiogroup" aria-label="默认插画"><button v-for="n in BANNER_SCENES" :key="n" type="button" class="scene-option" :class="{ active: form.scene === n }" role="radio" :aria-checked="form.scene === n" :disabled="saving" @click="form.scene = n"><span class="scene-thumb" :style="sceneStyle(n)" /><span>{{ SCENE_NAMES[n] }}</span></button></div>
+              <p class="help">{{ form.coverImage ? '已上传轮播图片，首页显示上传的图片；删除图片后显示这里选中的插画。' : '没有上传轮播图片时，首页显示这里选中的插画。' }}</p>
+            </el-form-item>
+            <el-form-item label="效果预览"><BannerPreview :title="form.title" :subtitle="form.subtitle" :cover-image="form.coverImage" :scene="form.scene" /><p class="help">首页顶部大图的样子，实际效果以小程序为准。</p></el-form-item>
+          </template>
           <el-form-item v-if="section === 'about'" label="图片说明"><el-input v-model="form.caption" maxlength="100" show-word-limit placeholder="显示在配图下方，例如：博鳌乐城国际医疗旅游先行区" /></el-form-item>
           <template v-if="section === 'hospital'">
             <div class="field-pair"><el-form-item label="医院类型"><el-autocomplete v-model="form.type" :fetch-suggestions="suggest(['综合医院', '专科医院', '健康管理中心'])" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /></el-form-item><el-form-item label="联系电话"><el-input v-model="form.phone" maxlength="60" placeholder="例如：0898-12345678" /></el-form-item></div>
@@ -30,7 +39,7 @@
             <el-form-item label="医生介绍"><el-input v-model="form.intro" type="textarea" :rows="5" maxlength="10000" show-word-limit placeholder="填写医生简介、专业方向等" /></el-form-item>
             <el-form-item label="服务方向"><el-input-tag :model-value="form.services" :delimiter="TAG_DELIMITER" save-on-blur clearable placeholder="直接输入，逗号、空格或回车分隔" @update:model-value="form.services = [...new Set($event || [])]" /></el-form-item>
           </template>
-          <el-form-item v-if="section !== 'doctor' && section !== 'about'" :label="section === 'hospital' ? '医院简介' : '列表摘要'"><el-input v-model="form[section === 'hospital' ? 'description' : 'summary']" type="textarea" :rows="3" :maxlength="section === 'hospital' ? 10000 : 500" show-word-limit :placeholder="section === 'hospital' ? '用文字介绍医院的基本情况' : section === 'news' || section === 'policy' ? '简要介绍这条内容，显示在列表中；不填则自动取正文第一段' : '简要介绍这条内容，显示在列表中'" /></el-form-item>
+          <el-form-item v-if="!['doctor', 'about', 'banner'].includes(section)" :label="section === 'hospital' ? '医院简介' : '列表摘要'"><el-input v-model="form[section === 'hospital' ? 'description' : 'summary']" type="textarea" :rows="3" :maxlength="section === 'hospital' ? 10000 : 500" show-word-limit :placeholder="section === 'hospital' ? '用文字介绍医院的基本情况' : AUTO_SUMMARY_SECTIONS.includes(section) ? '简要介绍这条内容，显示在列表中；不填则自动取正文第一段' : '简要介绍这条内容，显示在列表中'" /></el-form-item>
           <template v-if="section === 'policy'">
             <div class="field-pair"><el-form-item label="来源名称"><el-input v-model="form.sourceName" maxlength="100" placeholder="例如：国家发展和改革委员会" /></el-form-item><el-form-item label="来源链接"><el-input v-model="form.sourceUrl" maxlength="500" placeholder="https:// 开头的官方网址" /><p v-if="!isWebUrl(form.sourceUrl)" class="field-warning">请填写以 http:// 或 https:// 开头的完整网址，例如 https://www.gov.cn/…</p></el-form-item></div>
             <p class="help source-help">来源显示在政策正文下方；两项都不填则不显示来源。</p>
@@ -43,7 +52,7 @@
           <el-form-item v-if="section !== 'hospital'" class="category-field"><template #label>{{ section === 'project' ? '展示标签' : '所属科室' }}</template><el-autocomplete v-model="form.category" :fetch-suggestions="suggest(departments)" clearable maxlength="50" placeholder="直接输入，或从提示中选择" /><p v-if="section !== 'project' && !isFilterableDepartment(form.category)" class="field-warning">“{{ form.category }}”不在小程序的固定科室里，用户按科室筛选时找不到这条；建议从提示中选择。</p></el-form-item>
           <el-form-item label="疾病分类（选填）"><el-select :model-value="form.diseaseCategories || []" multiple clearable placeholder="选择相关疾病分类" @update:model-value="form.diseaseCategories = $event"><el-option v-for="d in diseases" :key="d" :label="d" :value="d" /></el-select></el-form-item>
         </section>
-        <section v-if="section !== 'doctor'">
+        <section v-if="section !== 'doctor' && section !== 'banner'">
           <h3>{{ isArticle ? '正文内容' : '详细介绍' }}</h3><p class="section-help">像编辑文章一样添加内容。文字、图片可以自由调整顺序。</p>
           <ContentBlocksEditor v-model="form.contentBlocks" @busy="trackUpload" />
         </section>
@@ -71,12 +80,13 @@
         <el-switch v-model="form.published" active-text="在小程序展示" aria-label="在小程序展示" :disabled="saving" />
         <p>{{ form.published ? '保存后，用户重新打开小程序即可看到更新。' : '保存为草稿，暂不显示在小程序中。' }}</p>
         <label for="content-order">列表排序</label><el-input-number id="content-order" v-model="form.sortOrder" :min="0" :max="100000" :precision="0" :disabled="saving" /><p>数字越小越靠前。不需要调整时保持原值即可。</p>
-        <div class="editing-guide"><strong>添加内容只需三步</strong><ol><li>填写名称和简介</li><li>上传图片、添加正文</li><li>开启展示并保存</li></ol></div>
+        <div class="editing-guide"><strong>添加内容只需三步</strong><ol><li v-for="step in guideSteps" :key="step">{{ step }}</li></ol></div>
       </aside>
     </div>
     <footer class="editor-footer"><span role="status">{{ uploading ? '图片正在上传，请稍候…' : dirty ? '有尚未保存的修改' : '可以开始编辑内容' }}</span><div><el-button :disabled="saving || uploading > 0" @click="close">取消</el-button><el-button type="primary" :loading="saving" :disabled="uploading > 0" @click="submit">{{ form.published ? '保存并展示' : '保存草稿' }}</el-button></div></footer>
     <el-drawer v-model="previewOpen" title="内容预览" size="420px" append-to-body>
-      <div class="content-preview"><img v-if="form.coverImage" :src="form.coverImage" alt="封面图片" /><div v-else class="preview-placeholder">{{ section === 'about' ? '配图' : '封面图片' }}</div><p v-if="section === 'about' && form.caption" class="preview-meta preview-caption">{{ form.caption }}</p><h2>{{ form[titleField] || nameLabel }}</h2><template v-if="section === 'policy'"><div v-if="form.tags.length" class="preview-tags"><span v-for="tag in form.tags" :key="tag">{{ tag }}</span></div><p v-if="form.fullTitle" class="preview-full-title">{{ form.fullTitle }}</p></template><p v-if="form.date || form.subtitle || form.category" class="preview-meta">{{ section === 'policy' && form.date ? '成文日期 · ' + form.date : form.date || form.subtitle || form.category }}</p><template v-if="section === 'hospital'"><div v-if="form.type || form.tags.length" class="preview-tags"><b v-if="form.type">{{ form.type }}</b><span v-for="tag in form.tags" :key="tag">{{ tag }}</span></div><p v-if="form.address || form.phone" class="preview-meta">{{ form.address }}{{ form.address && form.phone ? ' · ' : '' }}{{ form.phone ? '电话 ' + form.phone : '' }}</p></template><template v-if="section === 'doctor'"><p class="preview-meta">{{ [form.department, form.title, hospitals.find(h => h.id === form.hospitalId)?.name].filter(Boolean).join(' · ') }}</p><div v-if="form.services.length" class="preview-tags"><span v-for="item in form.services" :key="item">{{ item }}</span></div></template><p v-if="form.description || form.summary || form.intro">{{ form.description || form.summary || form.intro }}</p><template v-for="(block, i) in form.contentBlocks" :key="i"><template v-if="block.type === 'text'"><h3 v-if="block.title">{{ block.title }}</h3><p>{{ block.text }}</p></template><figure v-else-if="block.url"><img :src="block.url" :alt="block.caption || '正文图片'" /><figcaption>{{ block.caption }}</figcaption></figure></template><template v-if="form.environmentImages.length"><h3>医院环境</h3><div class="preview-gallery"><img v-for="url in form.environmentImages" :key="url" :src="url" alt="医院环境" /></div></template><template v-if="isProject && form.hospitalIds.length"><h3>落地医院</h3><p v-for="id in form.hospitalIds" :key="id">{{ hospitals.find(h => h.id === id)?.name }}</p></template><div v-if="section === 'policy' && (form.sourceName.trim() || form.sourceUrl.trim())" class="preview-source"><p>来源：{{ form.sourceName.trim() || '（未填写来源名称）' }}</p><p v-if="form.sourceUrl.trim()">{{ form.sourceUrl.trim() }}</p></div><p class="preview-meta">此处用于核对图片和文字，实际排版以小程序为准。</p></div>
+      <div v-if="section === 'banner'" class="content-preview"><p class="preview-meta">小程序首页顶部轮播</p><BannerPreview :title="form.title" :subtitle="form.subtitle" :cover-image="form.coverImage" :scene="form.scene" /><p class="preview-meta">此处用于核对图片和文字，实际效果以小程序为准。</p></div>
+      <div v-else class="content-preview"><img v-if="form.coverImage" :src="form.coverImage" alt="封面图片" /><div v-else-if="usesScene" class="preview-placeholder" :style="sceneStyle(form.scene)" role="img" aria-label="默认示意图片" /><div v-else class="preview-placeholder">{{ section === 'about' ? '配图' : '封面图片' }}</div><p v-if="section === 'about' && form.caption" class="preview-meta preview-caption">{{ form.caption }}</p><h2>{{ form[titleField] || nameLabel }}</h2><template v-if="section === 'policy'"><div v-if="form.tags.length" class="preview-tags"><span v-for="tag in form.tags" :key="tag">{{ tag }}</span></div><p v-if="form.fullTitle" class="preview-full-title">{{ form.fullTitle }}</p></template><p v-if="section === 'benefit' && form.period.trim()" class="preview-meta">活动时间：{{ form.period.trim() }}</p><p v-if="form.date || form.subtitle || form.category" class="preview-meta">{{ section === 'policy' && form.date ? '成文日期 · ' + form.date : form.date || form.subtitle || form.category }}</p><template v-if="section === 'hospital'"><div v-if="form.type || form.tags.length" class="preview-tags"><b v-if="form.type">{{ form.type }}</b><span v-for="tag in form.tags" :key="tag">{{ tag }}</span></div><p v-if="form.address || form.phone" class="preview-meta">{{ form.address }}{{ form.address && form.phone ? ' · ' : '' }}{{ form.phone ? '电话 ' + form.phone : '' }}</p></template><template v-if="section === 'doctor'"><p class="preview-meta">{{ [form.department, form.title, hospitals.find(h => h.id === form.hospitalId)?.name].filter(Boolean).join(' · ') }}</p><div v-if="form.services.length" class="preview-tags"><span v-for="item in form.services" :key="item">{{ item }}</span></div></template><p v-if="form.description || form.summary || form.intro">{{ form.description || form.summary || form.intro }}</p><template v-for="(block, i) in form.contentBlocks" :key="i"><template v-if="block.type === 'text'"><h3 v-if="block.title">{{ block.title }}</h3><p>{{ block.text }}</p></template><figure v-else-if="block.url"><img :src="block.url" :alt="block.caption || '正文图片'" /><figcaption>{{ block.caption }}</figcaption></figure></template><template v-if="form.environmentImages.length"><h3>医院环境</h3><div class="preview-gallery"><img v-for="url in form.environmentImages" :key="url" :src="url" alt="医院环境" /></div></template><template v-if="isProject && form.hospitalIds.length"><h3>落地医院</h3><p v-for="id in form.hospitalIds" :key="id">{{ hospitals.find(h => h.id === id)?.name }}</p></template><div v-if="section === 'policy' && (form.sourceName.trim() || form.sourceUrl.trim())" class="preview-source"><p>来源：{{ form.sourceName.trim() || '（未填写来源名称）' }}</p><p v-if="form.sourceUrl.trim()">{{ form.sourceUrl.trim() }}</p></div><p class="preview-meta">此处用于核对图片和文字，实际排版以小程序为准。</p></div>
     </el-drawer>
   </div>
 </template>
@@ -87,7 +97,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { saveContent } from '@/api/lecheng'
 import ContentImages from './ContentImages.vue'
 import ContentBlocksEditor from './ContentBlocksEditor.vue'
-import { createForm, serializeForm, departments, diseases, uid, isFilterableDepartment, isWebUrl, titleKey, itemLabel } from './content-model.mjs'
+import BannerPreview from './BannerPreview.vue'
+import { createForm, serializeForm, departments, diseases, uid, isFilterableDepartment, isWebUrl, titleKey, itemLabel, BANNER_SCENES } from './content-model.mjs'
+import { sceneStyle, SCENE_NAMES } from './scene-atlas'
 // 标签分隔符：中英文逗号、顿号、分号、空格（\s 表示空白）
 const TAG_DELIMITER = /[,，、;；\s]+/
 // 输入框下拉提示：正在输入部分文字时按文字过滤；输入框为空、已是完整选项或自定义值时显示全部常用项
@@ -104,15 +116,29 @@ const form = reactive(createForm(props.source, props.section)), baseline = JSON.
 const formRef = ref(), saving = ref(false), uploading = ref(0), previewOpen = ref(false), finished = ref(false)
 const dirty = computed(() => JSON.stringify(form) !== baseline)
 const isProject = computed(() => ['project', 'medicine', 'wellness'].includes(props.section))
-// 动态、政策、了解乐城是文章类内容：标题字段是 title，正文叫“正文内容”
+// 动态、政策、了解乐城、福利活动、服务流程是文章类内容（首页轮播也用 title）：标题字段是 title，正文叫“正文内容”
 const titleField = computed(() => titleKey(props.section))
 const isArticle = computed(() => titleField.value === 'title')
 // 只有批复项目、特许药械、亚健康项目会出现在小程序“查询”页
-const hasQueryFilters = computed(() => !['news', 'doctor', 'hospital', 'policy', 'about'].includes(props.section))
-const NAME_LABELS = { news: '文章标题', policy: '政策标题', about: '段落标题', doctor: '医生姓名', hospital: '医院名称', medicine: '药械名称' }
+const hasQueryFilters = computed(() => isProject.value)
+// 不填列表摘要时，保存时自动取正文第一段（见 content-model.mjs）
+const AUTO_SUMMARY_SECTIONS = ['news', 'policy', 'benefit', 'process']
+// 首页轮播、福利活动、服务流程没有图片时，小程序显示 4 张默认插画之一，预览里同样显示
+const usesScene = computed(() => ['banner', 'benefit', 'process'].includes(props.section))
+const NAME_LABELS = { news: '文章标题', policy: '政策标题', about: '段落标题', doctor: '医生姓名', hospital: '医院名称', medicine: '药械名称', banner: '大标题', benefit: '活动标题', process: '标题' }
 const nameLabel = computed(() => NAME_LABELS[props.section] || '项目名称')
-const COVER_HINTS = { policy: '显示在政策列表左侧；不上传则显示示意图片。', about: '显示在这一段介绍的上方；不上传则显示示意图片。' }
+const COVER_LABELS = { doctor: '医生照片', about: '配图', banner: '轮播图片' }
+const coverLabel = computed(() => COVER_LABELS[props.section] || '封面图片')
+const COVER_HINTS = {
+  policy: '显示在政策列表左侧；不上传则显示示意图片。',
+  about: '显示在这一段介绍的上方；不上传则显示示意图片。',
+  banner: '建议横图 16:9；不上传时显示默认插画。',
+  benefit: '显示在福利活动列表和活动详情顶部；不上传则显示示意图片。',
+  process: '显示在服务流程列表和详情顶部；不上传则显示示意图片。'
+}
 const coverHint = computed(() => COVER_HINTS[props.section])
+const GUIDE_STEPS = { banner: ['填写大标题和小标题', '上传轮播图片或选一张插画', '开启展示并保存'] }
+const guideSteps = computed(() => GUIDE_STEPS[props.section] || ['填写名称和简介', '上传图片、添加正文', '开启展示并保存'])
 const requiredName = { required: true, validator: (_, value, callback) => value?.trim() ? callback() : callback(new Error('请填写' + nameLabel.value)), trigger: 'blur' }
 const rules = computed(() => ({ [titleField.value]: [requiredName], hospitalId: [{ required: props.section === 'doctor', message: '请选择所属医院', trigger: 'change' }] }))
 function trackUpload(value) { uploading.value += value ? 1 : -1 }
@@ -183,6 +209,13 @@ h3 { margin:0 0 18px; font-size:17px; color:#253c52; }
 .preview-placeholder { background:#edf3f9; height:180px; display:grid; place-items:center; color:#8294a6; }
 .preview-gallery { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .source-help { margin:-8px 0 18px; }
+.scene-options { display:flex; flex-wrap:wrap; margin-bottom:-10px; }
+.scene-option { display:flex; flex-direction:column; align-items:center; width:116px; margin:0 10px 10px 0; padding:4px 4px 6px; border:2px solid #dce3eb; border-radius:6px; background:#fff; font-size:12px; line-height:1.6; color:#526779; cursor:pointer; }
+.scene-option:hover { border-color:#9cc3ec; }
+.scene-option.active { border-color:#3d8bea; color:#1f63b0; font-weight:600; }
+.scene-option:disabled { cursor:not-allowed; opacity:.6; }
+.scene-thumb { display:block; width:104px; height:64px; margin-bottom:4px; border-radius:4px; }
+.content-preview .preview-placeholder[role="img"] { height:200px; border-radius:6px; }
 .content-preview .preview-caption { margin:6px 0 0; text-align:center; }
 .content-preview .preview-full-title { margin:4px 0; font-weight:600; }
 .preview-source { margin:24px 0; padding:12px 14px; background:#f6f8fb; border-radius:6px; font-size:13px; color:#526779; }
