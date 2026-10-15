@@ -82,6 +82,10 @@ service.interceptors.response.use(res => {
     if (res.request.responseType ===  'blob' || res.request.responseType ===  'arraybuffer') {
       return res.data
     }
+    // silent: true 的请求（后台定时刷新，如客服未读数）出错时不弹提示，交给调用方自行处理
+    if (res.config && res.config.silent && code !== 200) {
+      return Promise.reject(Object.assign(new Error(msg), { code }))
+    }
     if (code === 401) {
       if (!isRelogin.show) {
         isRelogin.show = true
@@ -110,6 +114,7 @@ service.interceptors.response.use(res => {
   },
   error => {
     console.log('err' + error)
+    if (error && error.config && error.config.silent) return Promise.reject(error)
     let { message } = error
     if (message == "Network Error") {
       message = "后端接口连接异常"

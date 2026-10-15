@@ -19,6 +19,7 @@ import Sidebar from './components/Sidebar/index.vue'
 import { AppMain, Navbar, Settings, TagsView } from './components'
 import useAppStore from '@/store/modules/app'
 import useSettingsStore from '@/store/modules/settings'
+import { startLechengUnread, stopLechengUnread } from '@/utils/lecheng-unread'
 
 const settingsStore = useSettingsStore()
 const theme = computed(() => settingsStore.theme)
@@ -55,6 +56,10 @@ watchEffect(() => {
 function handleClickOutside() {
   useAppStore().closeSideBar({ withoutAnimation: false })
 }
+
+// 客服咨询未读提醒：登录进入后台后开始定时查询未读数（只会启动一次）
+onMounted(startLechengUnread)
+onBeforeUnmount(stopLechengUnread)
 
 const settingRef = ref(null)
 function setLayout() {

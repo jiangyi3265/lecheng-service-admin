@@ -178,3 +178,8 @@ aside {
     margin-bottom: 10px;
   }
 }
+
+// 客服新消息提醒：点击后进入客服咨询页（见 utils/lecheng-unread.js）
+.lecheng-unread-notice {
+  cursor: pointer;
+}
