@@ -4,7 +4,7 @@
     <el-alert v-else-if="loaded && !exists" type="info" show-icon :closable="false" class="support-tip" title="还没有保存过客服设置，下面是小程序目前显示的默认内容，修改后保存即可生效。" />
     <el-alert v-if="!canEdit" type="warning" show-icon :closable="false" class="support-tip" title="当前账号只能查看客服设置，如需修改请联系管理员开通“内容编辑”权限。" />
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="support-form" :disabled="saving || !canEdit || !!loadError">
-      <section class="support-card">
+      <section v-if="part !== 'contact'" class="support-card">
         <h3 class="card-title">客服页</h3>
         <p class="card-help">小程序“客服”页的头像、开场白和在线时间。</p>
         <div class="support-layout">
@@ -50,7 +50,7 @@
           </aside>
         </div>
       </section>
-      <section class="support-card">
+      <section v-if="part !== 'chat'" class="support-card">
         <h3 class="card-title">「我的」页联系方式</h3>
         <p class="card-help">显示在小程序“我的”页最下方的在线时间、地址和电话按钮。</p>
         <div class="support-layout">
@@ -111,6 +111,9 @@ import { listContent, saveContent } from '@/api/lecheng'
 import ContentImages from './ContentImages.vue'
 import defaultAvatar from '@/assets/images/customer-service-avatar.jpg'
 import phoneIcon from '@/assets/images/lecheng-mine-phone.png'
+
+// part：'chat' 只显示客服页设置，'contact' 只显示「我的」页联系方式，空 = 两块都显示（两块存在同一条记录里，一起保存）
+defineProps({ part: { type: String, default: '' } })
 
 // 与小程序 data/support.js 的默认内容一致；后台没有保存过时显示这些
 const SUPPORT_ID = 'support-settings'

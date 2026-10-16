@@ -70,7 +70,7 @@
       </el-tab-pane>
       <el-tab-pane label="客服设置" name="support">
         <el-button v-if="menuSection && menuSection.tab !== 'support'" text class="back-button" @click="leaveSupport">← 返回{{ menuSection.title }}</el-button>
-        <SupportSettings v-if="active === 'support'" ref="supportRef" />
+        <SupportSettings v-if="active === 'support'" ref="supportRef" :part="menuSection && menuSection.tab === 'support' ? menuSection.part : ''" />
       </el-tab-pane>
       <el-tab-pane label="园区导航" name="guide">
         <ParkGuideSettings v-if="active === 'guide'" ref="guideRef" />
@@ -112,7 +112,8 @@ const MENU_SECTIONS = {
   process: { tab: 'content', kind: 'process', title: '服务流程', hint: '“我的 → 服务流程”里的说明' },
   'park-guide': { tab: 'guide', title: '园区导航', hint: '“我的 → 园区导航”的地图位置和说明' },
   consultations: { tab: 'consultations', title: '客服咨询', hint: '查看小程序客服留言并回复' },
-  'support-settings': { tab: 'support', title: '客服设置', hint: '小程序客服页的头像、开场白，以及“我的”页的联系方式' },
+  'support-settings': { tab: 'support', part: 'chat', title: '客服设置', hint: '小程序客服页的头像、顶部标题、开场白和在线时间' },
+  contact: { tab: 'support', part: 'contact', title: '联系方式', hint: '小程序“我的”页下方的客服在线时间、地址和电话' },
   appointments: { tab: 'appointments', title: '预约申请', hint: '用户提交的预约咨询申请' },
   feedback: { tab: 'feedback', title: '用户反馈', hint: '用户提交的意见反馈' }
 }
